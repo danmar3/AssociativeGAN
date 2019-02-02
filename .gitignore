@@ -25,6 +25,7 @@ libarff/
 # --------------- data ---------------- #
 *.gz
 *_data/
+*data/
 *Data/
 *tmp/
 *.pkl
