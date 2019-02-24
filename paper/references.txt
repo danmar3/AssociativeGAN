@@ -1,4 +1,17 @@
 Disentangled Representation Learning GAN for Pose-Invariant Face Recognition
 http://cvlab.cse.msu.edu/pdfs/Tran_Yin_Liu_CVPR2017.pdf
 
+DISCRETE VARIATIONAL AUTOENCODERS
+https://arxiv.org/pdf/1609.02200.pdf
 
+Wasserstein GAN
+https://arxiv.org/pdf/1701.07875.pdf
+
+Self-Attention Generative Adversarial Networks
+https://arxiv.org/pdf/1805.08318.pdf
+
+Unifying Count-Based Exploration and Intrinsic Motivation
+https://pdfs.semanticscholar.org/1881/23b5afe0d3b59e9e44f33729649536fe6ea6.pdf
+
+Action-Conditional Video Prediction using Deep Networks in Atari Games
+https://arxiv.org/pdf/1507.08750.pdf
