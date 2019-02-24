@@ -15,3 +15,9 @@ https://pdfs.semanticscholar.org/1881/23b5afe0d3b59e9e44f33729649536fe6ea6.pdf
 
 Action-Conditional Video Prediction using Deep Networks in Atari Games
 https://arxiv.org/pdf/1507.08750.pdf
+
+IMPROVING THE IMPROVED TRAINING OF WASSERSTEIN GANS: A CONSISTENCY TERM AND ITS DUAL EFFECT
+https://openreview.net/pdf?id=SJx9GQb0-
+
+Gaussian Mixture Generative Adversarial Networks for Diverse Datasets, and the Unsupervised Clustering of Images
+https://arxiv.org/pdf/1808.10356.pdf
