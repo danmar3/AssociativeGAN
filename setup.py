@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 # for distribution: python setup.py sdist #bdist_wheel
 #                   pip install dist/project_name.tar.gz
 DEPS = ['tensorflow-gpu', 'tensorflow-probability', 'pandas', 'twodlearn',
-        'matplotlib', 'jupyter', 'scipy']
+        'matplotlib', 'jupyter', 'scipy', 'tensorflow-datasets']
 
 
 def get_dependencies():
