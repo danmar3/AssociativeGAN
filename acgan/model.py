@@ -78,12 +78,15 @@ class DCGAN(tdl.core.TdlModel):
         )
 
     @tdl.core.MethodInit
-    def noise_rate(self, local, rate):
+    def noise_rate(self, local, rate=None):
         local.rate = rate
 
     @noise_rate.eval
     def noise_rate(self, local, step):
-        return tf.exp(-local.rate * tf.cast(step, tf.float32))
+        if local.rate is None:
+            return None
+        else:
+            return tf.exp(-local.rate * tf.cast(step, tf.float32))
 
     def discriminator_trainer(self, batch_size, xreal=None, input_shape=None):
         tdl.core.assert_initialized(self, 'discriminator_trainer',
@@ -96,8 +99,15 @@ class DCGAN(tdl.core.TdlModel):
 
         train_step = tf.Variable(0, dtype=tf.int32, name='disc_train_step')
         noise_rate = self.noise_rate(train_step)
-        #xreal = tf.nn.dropout(xreal, rate=noise_rate)
-        #xsim = tf.nn.dropout(xsim, rate=self.noise_rate(train_step))
+        if noise_rate is not None:
+            uniform_noise = tf.random.uniform(shape=tf.shape(xreal),
+                                              minval=0, maxval=1)
+            xreal = tf.where(uniform_noise > noise_rate, xreal,
+                             2*uniform_noise-1)
+            # uniform_noise = tf.random.uniform(shape=tf.shape(xreal),
+            #                                   minval=0, maxval=1)
+            # xsim = tf.where(uniform_noise > noise_rate, xsim,
+            #                 2*uniform_noise-1)
 
         pred_real = self.discriminator(xreal, training=True)
         pred_sim = self.discriminator(xsim, trainint=True)
