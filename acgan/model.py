@@ -31,10 +31,12 @@ class DCGAN(tdl.core.TdlModel):
         model.add(tf_layers.Reshape(init_shape))
 
         for i in range(len(units)):
+            model.add(tf.keras.layers.BatchNormalization())
             model.add(tf_layers.LeakyReLU())
             model.add(tf_layers.Conv2DTranspose(
                 units[i], kernels[i], strides=strides[i],
                 padding='same', use_bias=False))
+        model.add(tf_layers.Activation(tf.keras.activations.tanh))
         return model
 
     @tdl.core.SubmodelInit
@@ -53,38 +55,70 @@ class DCGAN(tdl.core.TdlModel):
                 model.add(tf_layers.Dropout(dropout))
         model.add(tf_layers.Flatten())
         model.add(tf_layers.Dense(1))
+        model.add(tf_layers.Activation(tf.keras.activations.sigmoid))
         return model
 
     def generator_trainer(self, batch_size):
+        tdl.core.assert_initialized(self, 'generator_trainer',
+                                    ['generator', 'discriminator'])
         noise = tf.random.normal([batch_size, self.embedding_size])
-        xsim = self.generator(noise)
-        pred = self.discriminator(xsim)
+        xsim = self.generator(noise, training=True)
+        pred = self.discriminator(xsim, trainint=True)
         loss = tf.keras.losses.BinaryCrossentropy()(
             tf.ones_like(pred), pred)
-        step = tf.train.AdamOptimizer().minimize(loss)
+
+        optimizer = tf.train.AdamOptimizer(0.0001)
+        step = optimizer.minimize(
+            loss, var_list=tdl.core.get_trainable(self.generator))
         return tdl.core.SimpleNamespace(
-            loss=loss, xsim=xsim, pred=pred, step=step
+            loss=loss, xsim=xsim, pred=pred, step=step,
+            optimizer=optimizer,
+            variables=(optimizer.variables() +
+                       tdl.core.get_variables(self.generator))
         )
 
+    @tdl.core.MethodInit
+    def noise_rate(self, local, rate):
+        local.rate = rate
+
+    @noise_rate.eval
+    def noise_rate(self, local, step):
+        return tf.exp(-local.rate * tf.cast(step, tf.float32))
+
     def discriminator_trainer(self, batch_size, xreal=None, input_shape=None):
+        tdl.core.assert_initialized(self, 'discriminator_trainer',
+                                    ['generator', 'discriminator',
+                                     'noise_rate'])
         if xreal is None:
             xreal = tf.keras.Input(shape=input_shape)
         noise = tf.random.normal([batch_size, self.embedding_size])
-        xsim = self.generator(noise)
+        xsim = self.generator(noise, trainint=True)
 
-        pred_real = self.discriminator(xreal)
-        pred_sim = self.discriminator(xsim)
+        train_step = tf.Variable(0, dtype=tf.int32, name='disc_train_step')
+        noise_rate = self.noise_rate(train_step)
+        #xreal = tf.nn.dropout(xreal, rate=noise_rate)
+        #xsim = tf.nn.dropout(xsim, rate=self.noise_rate(train_step))
+
+        pred_real = self.discriminator(xreal, training=True)
+        pred_sim = self.discriminator(xsim, trainint=True)
         pred = tf.concat([pred_real, pred_sim], axis=0)
         loss_real = tf.keras.losses.BinaryCrossentropy()(
             tf.ones_like(pred_real), pred_real)
         loss_sim = tf.keras.losses.BinaryCrossentropy()(
-            tf.ones_like(pred_sim), pred_sim)
+            tf.zeros_like(pred_sim), pred_sim)
         loss = loss_real + loss_sim
 
-        step = tf.train.AdamOptimizer().minimize(loss)
+        optimizer = tf.train.AdamOptimizer(0.0001)
+        with tf.control_dependencies([train_step.assign_add(1)]):
+            step = optimizer.minimize(
+                loss, var_list=tdl.core.get_trainable(self.discriminator))
         return tdl.core.SimpleNamespace(
             loss=loss, xreal=xreal, xsim=xsim,
-            output=pred, step=step
+            output=pred, step=step, optimizer=optimizer,
+            variables=(optimizer.variables() + [train_step] +
+                       tdl.core.get_variables(self.discriminator)),
+            train_step=train_step,
+            noise_rate=noise_rate
         )
 
     def __init__(self, embedding_size, name=None, **kargs):
