@@ -1,12 +1,9 @@
-import pandas as pd
 import numpy as np
-import collections
-
 import torch
 from torch import nn
-from tqdm.auto import tqdm
+
 import attr
-import dsdag
+from tqdm.auto import tqdm
 
 def auto_extend(*args, max_len=None):
     args = [ list(a) if isinstance(a, (list, tuple)) else [a] for a in args]
