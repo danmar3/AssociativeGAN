@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from torch import nn
+from matplotlib import pyplot as plt
+import torchvision.utils as vutils
 
 import attr
 from tqdm.auto import tqdm
@@ -28,6 +30,24 @@ def weights_init(m):
         torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
         torch.nn.init.constant_(m.bias.data, 0)
 
+def intermediate_outputs(_m, input_data, show_layer=True, print_display=True):
+    outputs = list()
+    if print_display:
+        print("Input Shape: %s" % str(tuple(input_data.shape)))
+    for li in range(1, len(_m)+1):
+        _out = _m[:li](input_data)
+        if print_display:
+            print("-- Layer %d --" % li)
+
+        if print_display and show_layer:
+            print(_m[li])
+
+        if print_display:
+            print(tuple(_out.shape))
+            print("\t|\n\tV")
+
+        outputs.append(_out)
+    return outputs
 
 class CNNTransposeBlock(torch.nn.Module):
     def __init__(self, in_channels,
@@ -123,7 +143,7 @@ class GANTrainer():
             self.disc_optim = torch.optim.Adam(self.disc_model.parameters(),
                                                lr=self.learning_rate,
                                                betas=(self.beta1, 0.999))
-        if self.gen_optim is None
+        if self.gen_optim is None:
             self.gen_optim = torch.optim.Adam(self.gen_model.parameters(),
                                               lr=self.learning_rate,
                                               betas=(self.beta1, 0.999))
@@ -202,9 +222,22 @@ class GANTrainer():
                 epoch_pbar.update(1)
         return self.epoch_losses
 
-    def display_batch(self, batch_size=16, noise=None, batch_data=None, figsize=(10, 10), title='Generated Data'):
-        from matplotlib import pyplot as plt
-        import torchvision.utils as vutils
+    @staticmethod
+    def grid_display(data, figsize=(10,10), pad_value=0, title=''):
+        fig, ax = plt.subplots(figsize=figsize)
+
+        #fig = plt.figure(figsize=figsize)
+        ax.axis("off")
+        ax.set_title(title)
+        ax.imshow(np.transpose(vutils.make_grid(data,
+                                                padding=2,
+                                                normalize=True,
+                                                pad_value=pad_value).detach().cpu(), (1, 2, 0)))
+
+        return fig
+
+    def display_batch(self, batch_size=16, noise=None, batch_data=None, figsize=(10, 10), title='Generated Data',
+                      pad_value=0):
         if batch_data is None and noise is None:
             noise = torch.randn(batch_size, self.in_channel_size, 1, 1, device=self.device)
             fake_batch = self.gen_model(noise).to('cpu')
@@ -215,12 +248,5 @@ class GANTrainer():
             fake_batch = self.gen_model(noise).to('cpu')
 
         #real_batch = next(iter(self.data_gen))
-        fig = plt.figure(figsize=figsize)
-        plt.axis("off")
-        plt.title(title)
-        plt.imshow(np.transpose(vutils.make_grid(fake_batch,
-                                                  padding=2,
-                                                  normalize=True).detach().cpu(), (1, 2, 0)))
 
-        return fig
-
+        return self.grid_display(fake_batch, figsize=figsize, title=title, pad_value=pad_value)
