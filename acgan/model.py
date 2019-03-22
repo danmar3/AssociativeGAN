@@ -19,6 +19,7 @@ class DCGAN(tdl.core.TdlModel):
             'list does not have the expected number of elements'
         return value
 
+
     @tdl.core.SubmodelInit
     def generator(self, init_shape, units, kernels=5, strides=2):
         n_layers = len(units)
