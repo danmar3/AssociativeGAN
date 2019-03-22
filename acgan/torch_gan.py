@@ -12,7 +12,6 @@ def auto_extend(*args, max_len=None):
     return list(zip(*args))
 
 def make_model_from_block(cls, z_dim, n_channels, kernel_sizes, strides, paddings):
-    #_iter = list(enumerate(zip(n_channels, kernel_sizes, strides, paddings)))
     _iter = auto_extend(n_channels, kernel_sizes, strides, paddings)
     model = torch.nn.Sequential()
     for i, (_n_chan, _kernel_size, _stride, _padding) in enumerate(_iter):
@@ -23,10 +22,8 @@ def make_model_from_block(cls, z_dim, n_channels, kernel_sizes, strides, padding
 
 def weights_init(m):
     classname = m.__class__.__name__
-    #if classname.find('Conv') != -1:
     if 'Conv' in classname:
         torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
-    #elif classname.find('BatchNorm') != -1:
     elif 'BatchNorm' in classname:
         torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
         torch.nn.init.constant_(m.bias.data, 0)
@@ -36,12 +33,12 @@ class CNNTransposeBlock(torch.nn.Module):
     def __init__(self, in_channels,
                     out_channels,
                     kernel_size,
-                    stride = 1,
-                    padding = 0,
-                    output_padding = 0,
-                    groups = 1,
-                    bias = True,
-                    dilation = 1):
+                    stride=1,
+                    padding=0,
+                    output_padding=0,
+                    groups=1,
+                    bias=True,
+                    dilation=1):
         super(CNNTransposeBlock, self).__init__()
 
         self.convt = nn.ConvTranspose2d(in_channels=in_channels,
@@ -102,6 +99,8 @@ class GANTrainer():
     learning_rate = attr.ib(0.0002)
     beta1 = attr.ib(0.5)
     criterion = attr.ib(torch.nn.BCELoss())
+    disc_optim = attr.ib(None)
+    gen_optim = attr.ib(None)
     device = attr.ib(torch.device("cuda:0" if torch.cuda.is_available() else "cpu"))
 
     epochs_trained = attr.ib(0, init=False)
@@ -112,12 +111,6 @@ class GANTrainer():
 
     def train(self, n_epochs, epoch_callbacks=None, batch_callbacks=None,
               batch_cb_delta=3):
-        # Initialize BCELoss function
-        #criterion = torch.nn.BCELoss()
-
-        # Create batch of latent vectors that we will use to visualize
-        #  the progression of the generator
-        #fixed_noise = torch.randn(64, nz, 1, 1)  # , device=device)
 
         epoch_callbacks = dict() if epoch_callbacks is None else epoch_callbacks
         batch_callbacks = dict() if batch_callbacks is None else batch_callbacks
@@ -125,11 +118,13 @@ class GANTrainer():
         real_label = 1
         fake_label = 0
 
-        # Setup Adam optimizers for both G and D
-        self.disc_optim = torch.optim.Adam(self.disc_model.parameters(),
-                                              lr=self.learning_rate,
-                                              betas=(self.beta1, 0.999))
-        self.gen_optim = torch.optim.Adam(self.gen_model.parameters(),
+        # Optimizers
+        if self.disc_optim is None:
+            self.disc_optim = torch.optim.Adam(self.disc_model.parameters(),
+                                               lr=self.learning_rate,
+                                               betas=(self.beta1, 0.999))
+        if self.gen_optim is None
+            self.gen_optim = torch.optim.Adam(self.gen_model.parameters(),
                                               lr=self.learning_rate,
                                               betas=(self.beta1, 0.999))
 
@@ -206,12 +201,6 @@ class GANTrainer():
                 epoch_cb_history.append({k: cb(self, epoch) for k, cb in epoch_callbacks.items()})
                 epoch_pbar.update(1)
         return self.epoch_losses
-        #return G_losses, D_losses
-
-
-
-    #def display_batch(self, batch_size=16, noise=None, figsize=(10, 10), title='Generated Data'):
-    #    pass
 
     def display_batch(self, batch_size=16, noise=None, batch_data=None, figsize=(10, 10), title='Generated Data'):
         from matplotlib import pyplot as plt
