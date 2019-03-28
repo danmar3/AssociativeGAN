@@ -6,16 +6,20 @@ from setuptools import setup, find_packages
 # for development installation: pip install -e .
 # for distribution: python setup.py sdist #bdist_wheel
 #                   pip install dist/project_name.tar.gz
-DEPS = ['tensorflow-gpu', 'tensorflow-probability', 'pandas', 'twodlearn',
+DEPS = ['tensorflow-probability', 'pandas', 'twodlearn',
         'matplotlib', 'jupyter', 'scipy', 'tensorflow-datasets',
         'attrs']
 
 
 def get_dependencies():
-    if any(['tensorflow' in installed for installed in freeze.freeze()]):
-        return [dep for dep in DEPS if 'tensorflow' not in dep]
-    else:
+    tf_names = ['tensorflow-gpu', 'tensorflow', 'tf-nightly']
+    tf_installed = any([any(tfname == installed.split('==')[0]
+                            for tfname in tf_names)
+                        for installed in freeze.freeze()])
+    if tf_installed:
         return DEPS
+    else:
+        return DEPS + ['tensorflow']
 
 
 setup(name='acgan',

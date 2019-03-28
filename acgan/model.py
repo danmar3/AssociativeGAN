@@ -19,12 +19,14 @@ class DCGAN(tdl.core.TdlModel):
             'list does not have the expected number of elements'
         return value
 
-
     @tdl.core.SubmodelInit
-    def generator(self, init_shape, units, kernels=5, strides=2):
+    def generator(self, init_shape, units, kernels=5, strides=2,
+                  padding='same'):
         n_layers = len(units)
         kernels = self._to_list(kernels, n_layers)
         strides = self._to_list(strides, n_layers)
+        padding = (padding if isinstance(padding, (list, tuple))
+                   else [padding]*n_layers)
         model = tdl.stacked.StackedLayers()
 
         model.add(tdl.dense.LinearLayer(
@@ -33,25 +35,32 @@ class DCGAN(tdl.core.TdlModel):
 
         for i in range(len(units)):
             model.add(tf.keras.layers.BatchNormalization())
-            model.add(tf_layers.LeakyReLU())
+            model.add(tf_layers.ReLU())
+            # model.add(tf_layers.Activation(tf.keras.activations.softplus))
             model.add(tf_layers.Conv2DTranspose(
                 units[i], kernels[i], strides=strides[i],
-                padding='same', use_bias=False))
+                padding=padding[i],
+                use_bias=False))
         model.add(tf_layers.Activation(tf.keras.activations.tanh))
         return model
 
     @tdl.core.SubmodelInit
-    def discriminator(self, units, kernels, strides, dropout=None):
+    def discriminator(self, units, kernels, strides, dropout=None,
+                      padding='same'):
         n_layers = len(units)
         kernels = self._to_list(kernels, n_layers)
         strides = self._to_list(strides, n_layers)
+        padding = (padding if isinstance(padding, (list, tuple))
+                   else [padding]*n_layers)
         model = tdl.stacked.StackedLayers()
 
         for i in range(len(units)):
             model.add(tf_layers.Conv2D(
                 units[i], kernels[i], strides=strides[i],
-                padding='same'))
-            model.add(tf_layers.LeakyReLU())
+                padding=padding[i]))
+            model.add(tf.keras.layers.BatchNormalization())
+            model.add(tf_layers.LeakyReLU(0.2))
+            # model.add(tf_layers.Activation(tf.keras.activations.softplus))
             if dropout is not None:
                 model.add(tf_layers.Dropout(dropout))
         model.add(tf_layers.Flatten())
@@ -59,7 +68,7 @@ class DCGAN(tdl.core.TdlModel):
         model.add(tf_layers.Activation(tf.keras.activations.sigmoid))
         return model
 
-    def generator_trainer(self, batch_size):
+    def generator_trainer(self, batch_size, learning_rate=0.0002):
         tdl.core.assert_initialized(self, 'generator_trainer',
                                     ['generator', 'discriminator'])
         noise = tf.random.normal([batch_size, self.embedding_size])
@@ -68,7 +77,7 @@ class DCGAN(tdl.core.TdlModel):
         loss = tf.keras.losses.BinaryCrossentropy()(
             tf.ones_like(pred), pred)
 
-        optimizer = tf.train.AdamOptimizer(0.0001)
+        optimizer = tf.train.AdamOptimizer(learning_rate, beta1=0.5)
         step = optimizer.minimize(
             loss, var_list=tdl.core.get_trainable(self.generator))
         return tdl.core.SimpleNamespace(
@@ -89,7 +98,8 @@ class DCGAN(tdl.core.TdlModel):
         else:
             return tf.exp(-local.rate * tf.cast(step, tf.float32))
 
-    def discriminator_trainer(self, batch_size, xreal=None, input_shape=None):
+    def discriminator_trainer(self, batch_size, xreal=None, input_shape=None,
+                              learning_rate=0.0002):
         tdl.core.assert_initialized(self, 'discriminator_trainer',
                                     ['generator', 'discriminator',
                                      'noise_rate'])
@@ -117,9 +127,9 @@ class DCGAN(tdl.core.TdlModel):
             tf.ones_like(pred_real), pred_real)
         loss_sim = tf.keras.losses.BinaryCrossentropy()(
             tf.zeros_like(pred_sim), pred_sim)
-        loss = loss_real + loss_sim
+        loss = (loss_real + loss_sim)/2.0
 
-        optimizer = tf.train.AdamOptimizer(0.0001)
+        optimizer = tf.train.AdamOptimizer(learning_rate, beta1=0.5)
         with tf.control_dependencies([train_step.assign_add(1)]):
             step = optimizer.minimize(
                 loss, var_list=tdl.core.get_trainable(self.discriminator))
