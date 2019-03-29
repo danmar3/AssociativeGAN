@@ -13,12 +13,17 @@ def auto_extend(*args, max_len=None):
     args = [ a if len(a) == max_len else a + ([a[-1]] * (max_len - len(a))) for a in args]
     return list(zip(*args))
 
-def make_model_from_block(cls, z_dim, n_channels, kernel_sizes, strides, paddings):
-    _iter = auto_extend(n_channels, kernel_sizes, strides, paddings)
+def make_model_from_block(cls, z_dim, n_channels, kernel_sizes,
+                          strides, paddings, dilations=[1]):
+    _iter = auto_extend(n_channels, kernel_sizes, strides,
+                        paddings, #output_paddings,
+                        dilations)
     model = torch.nn.Sequential()
-    for i, (_n_chan, _kernel_size, _stride, _padding) in enumerate(_iter):
+    for i, (_n_chan, _kernel_size, _stride, _padding, _dilation) in enumerate(_iter):
         blk = cls(z_dim if not i else n_channels[i - 1],
-                  _n_chan, _kernel_size, _stride, _padding)
+                  _n_chan, kernel_size=_kernel_size, stride=_stride,
+                  padding=_padding, #output_padding=_op,
+                  groups=1, bias=True, dilation=_dilation)
         model.add_module(name="Block_%d" % i, module=blk)
     return model
 
@@ -40,7 +45,7 @@ def intermediate_outputs(_m, input_data, show_layer=True, print_display=True):
             print("-- Layer %d --" % li)
 
         if print_display and show_layer:
-            print(_m[li])
+            print(_m[li-1])
 
         if print_display:
             print(tuple(_out.shape))
@@ -71,7 +76,8 @@ class CNNTransposeBlock(torch.nn.Module):
                               bias=bias,
                               dilation=dilation)
         self.bn = nn.BatchNorm2d(out_channels)
-        self.act = nn.ReLU(True)
+        #self.act = nn.ReLU(True)
+        self.act = nn.LeakyReLU(negative_slope=0.2)
 
     def forward(self, x):
         out = self.convt(x)
@@ -100,7 +106,8 @@ class CNNBlock(torch.nn.Module):
         self.batchnorm = batchnorm
         if self.batchnorm:
             self.bn = nn.BatchNorm2d(num_features=out_channels)
-        self.act = nn.ReLU(True)
+        #self.act = nn.ReLU(True)
+        self.act = nn.LeakyReLU(negative_slope=0.2)
 
     def forward(self, x):
         out = self.conv(x)
