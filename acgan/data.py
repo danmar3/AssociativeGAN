@@ -25,7 +25,7 @@ def load_fashion_mnist(batch_size, split=tfds.Split.TRAIN):
 def load_celeb_a(batch_size, split=tfds.Split.TRAIN):
     def map_fn(batch):
         batch = tf.cast(batch['image'], tf.float32)
-        batch = tf.image.central_crop(batch, central_fraction=0.85)
+        # batch = tf.image.central_crop(batch, central_fraction=0.85)
         batch = tf.image.resize_bilinear(
             batch, size=(64, 64), align_corners=False)
         batch = (batch-127.5)/127.5
