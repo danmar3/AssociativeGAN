@@ -4,7 +4,7 @@ import twodlearn as tdl
 import typing
 
 
-def _compute_output_shape(chain, input_shape):
+def compute_output_shape(chain, input_shape):
     output_shape = input_shape
     for fn in chain:
         if fn is not None:
@@ -42,7 +42,7 @@ class TransposeLayer(tdl.core.Layer):
 
     def compute_output_shape(self, input_shape=None):
         chain = [self.conv, self.activation]
-        return _compute_output_shape(chain, input_shape)
+        return compute_output_shape(chain, input_shape)
 
     def call(self, inputs):
         output = self.conv(inputs)

@@ -4,7 +4,7 @@ import twodlearn as tdl
 import tensorflow as tf
 import tensorflow.keras.layers as tf_layers
 from .base import (BaseGAN, TransposeLayer, BatchNormalization,
-                   _compute_output_shape)
+                   compute_output_shape)
 from .msg_gan import MSGProjection
 
 
@@ -18,7 +18,7 @@ class DCGANHiddenGen(TransposeLayer, BatchNormalization):
 
     def compute_output_shape(self, input_shape=None):
         chain = [self.conv, self.batch_normalization, self.activation]
-        return _compute_output_shape(chain, input_shape)
+        return compute_output_shape(chain, input_shape)
 
     def call(self, inputs):
         output = self.conv(inputs)

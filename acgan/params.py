@@ -4,6 +4,7 @@ PARAMS = {
     'mnist': {
         'dcgan': {
             'model': {
+                'embedding_size': 128,
                 'generator': {
                     'init_shape': (7, 7, 256),
                     'units': [128, 64, 1],
@@ -24,18 +25,20 @@ PARAMS = {
     'celeb_a': {
         'dcgan': {
             'model': {
+                'embedding_size': 256,
                 'generator': {
-                    'init_shape': (4, 4, 256),
-                    'units': [1024, 512, 256, 128, 3],
-                    'kernels': [(3, 3), (3, 3), (4, 4), (4, 4), (4, 4)],
-                    'strides': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2]],
-                    'padding': ['same', 'same', 'same', 'same', 'same']
-                },
+                    'init_shape': (4, 4, 1024),
+                    'units': [512, 256, 128, 3],
+                    'kernels': [(5, 5), (5, 5), (5, 5), (5, 5)],
+                    'strides': [[2, 2], [2, 2], [2, 2], [2, 2]],
+                    'padding': ['same', 'same', 'same', 'same']
+                    },
                 'discriminator': {
                     'units': [128, 256, 512, 1024],
-                    'kernels': 4,
+                    'kernels': 5,
                     'strides': 2,
-                    'dropout': None}
+                    'dropout': None
+                    }
                 },
             'train': {
                 'gen/steps': 1,
