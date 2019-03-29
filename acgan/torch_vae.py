@@ -1,25 +1,15 @@
-import argparse
 import torch
 import torch.utils.data
 from torch import nn, optim
 from torch.nn import functional as F
-from torchvision import datasets, transforms
-from torchvision.utils import save_image
 
 from acgan import torch_gan
 
 import torch.utils.data
-import torchvision.datasets as dset
-
-import torchvision.transforms as transforms
-import torchvision.utils as vutils
-
-import matplotlib.pyplot as plt
 
 import numpy as np
 import attr
 from tqdm.auto import tqdm
-
 
 
 class VAE(nn.Module):
@@ -71,9 +61,11 @@ class VAETrainer:
     # Reconstruction + KL divergence losses summed over all elements and batch
     @staticmethod
     def loss_function(recon_x, x, mu, logvar):
-        image_size = 64
-        depth = 3
-        BCE = F.binary_cross_entropy(recon_x, x.view(-1, (image_size ** 2) * depth), reduction='sum')
+        #image_size = 64
+        #depth = 3
+        #BCE = F.binary_cross_entropy(recon_x, x.view(-1, (image_size ** 2) * depth), reduction='sum')
+        BCE = F.binary_cross_entropy(recon_x, x.view(-1, (x.shape[1] * x.shape[2] * x.shape[3])),
+                                     reduction='sum')
 
         # see Appendix B from VAE paper:
         # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
