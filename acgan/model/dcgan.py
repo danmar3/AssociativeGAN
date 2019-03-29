@@ -59,6 +59,6 @@ class DCGANProjection(tdl.stacked.StackedLayers):
 
 @tdl.core.create_init_docstring
 class DCGAN(BaseGAN):
-    LinearProjection = MSGProjection
+    InputProjection = MSGProjection
     HiddenGenLayer = DCGANHiddenGen
     OutputGenLayer = DCGANOutputGen

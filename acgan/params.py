@@ -21,21 +21,21 @@ PARAMS = {
                 }
             }
         },
-    'celeb_a_full': {
+    'celeb_a': {
         'dcgan': {
             'model': {
                 'generator': {
-                    'init_shape': (7, 6, 256),
-                    'units': [512, 256, 128, 64, 3],
-                    'kernels': [(5, 4), (5, 4), (5, 5), (5, 5), (5, 5)],
-                    'strides': [(1, 1), (2, 2), (2, 2), (2, 2), (2, 2)],
-                    'padding': ['valid', 'valid', 'valid', 'valid', 'same']
+                    'init_shape': (4, 4, 256),
+                    'units': [1024, 512, 256, 128, 3],
+                    'kernels': [(3, 3), (3, 3), (4, 4), (4, 4), (4, 4)],
+                    'strides': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2]],
+                    'padding': ['same', 'same', 'same', 'same', 'same']
                 },
                 'discriminator': {
-                    'units': [64, 128],
-                    'kernels': 5,
+                    'units': [128, 256, 512, 1024],
+                    'kernels': 4,
                     'strides': 2,
-                    'dropout': 0.3}
+                    'dropout': None}
                 },
             'train': {
                 'gen/steps': 1,

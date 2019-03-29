@@ -14,11 +14,26 @@ def _compute_output_shape(chain, input_shape):
 
 @tdl.core.create_init_docstring
 class TransposeLayer(tdl.core.Layer):
+    @tdl.core.InputArgument
+    def units(self, value):
+        '''Number of output filters.'''
+        if value is None:
+            raise tdl.core.exceptions.ArgumentNotProvided()
+        return value
+
+    @tdl.core.InputArgument
+    def upsampling(self, value):
+        '''Upsampling ratio.'''
+        if value is None:
+            raise tdl.core.exceptions.ArgumentNotProvided()
+        return value
+
     @tdl.core.SubmodelInit
-    def conv(self, units, kernels, strides, padding):
+    def conv(self, kernels, padding):
+        tdl.core.assert_initialized(self, 'conv', ['units', 'upsampling'])
         return tf_layers.Conv2DTranspose(
-                units, kernels, strides=strides,
-                padding=padding,
+                self.units, kernel_size=kernels,
+                strides=self.upsampling, padding=padding,
                 use_bias=False)
 
     @tdl.core.Submodel
@@ -47,7 +62,7 @@ class BatchNormalization(tdl.core.Layer):
 
 @tdl.core.create_init_docstring
 class BaseGAN(tdl.core.TdlModel):
-    LinearProjection = None
+    InputProjection = None
     HiddenGenLayer = None
     OutputGenLayer = None
 
@@ -56,7 +71,7 @@ class BaseGAN(tdl.core.TdlModel):
         if isinstance(value, int):
             value = [value]*n_elements
         if isinstance(value[0], int):
-            value = [(vi, vi) for vi in value]
+            value = [[vi, vi] for vi in value]
         assert len(value) == n_elements, \
             'list does not have the expected number of elements'
         assert all([len(vi) == 2 for vi in value]), \
@@ -72,14 +87,14 @@ class BaseGAN(tdl.core.TdlModel):
         padding = (padding if isinstance(padding, (list, tuple))
                    else [padding]*n_layers)
         model = tdl.stacked.StackedLayers()
-        model.add(self.LinearProjection(projected_shape=init_shape))
+        model.add(self.InputProjection(projected_shape=init_shape))
         for i in range(len(units)-1):
             model.add(self.HiddenGenLayer(
-                conv={'units': units[i], 'kernels': kernels[i],
-                      'strides': strides[i], 'padding': padding[i]}))
+                units=units[i], upsampling=strides[i],
+                conv={'kernels': kernels[i], 'padding': padding[i]}))
         model.add(self.OutputGenLayer(
-                conv={'units': units[-1], 'kernels': kernels[-1],
-                      'strides': strides[-1], 'padding': padding[-1]}))
+                units=units[-1], upsampling=strides[-1],
+                conv={'kernels': kernels[-1], 'padding': padding[-1]}))
         return model
 
     @tdl.core.SubmodelInit
