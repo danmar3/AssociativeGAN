@@ -1,3 +1,4 @@
+# Torch VAE example used as reference: https://github.com/pytorch/examples/tree/master/vae
 import torch
 import torch.utils.data
 from torch import nn, optim
@@ -10,7 +11,6 @@ import torch.utils.data
 import numpy as np
 import attr
 from tqdm.auto import tqdm
-
 
 class VAE(nn.Module):
     def __init__(self, input_size=784):
