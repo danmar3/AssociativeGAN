@@ -206,7 +206,7 @@ class ImagePyramid(tdl.core.Layer):
 
     @tdl.core.Submodel
     def _resize_fn(self, _):
-        tf.core.assert_initialized(self, '_resize_fn', ['interpolation'])
+        tdl.core.assert_initialized(self, '_resize_fn', ['interpolation'])
         if self.interpolation == 'nearest':
             value = tf.image.resize_nearest_neighbor
         elif self.interpolation == 'bilinear':
@@ -238,7 +238,7 @@ class ImagePyramid(tdl.core.Layer):
         scales = ([self.scales]*self.depth if isinstance(self.scales, int)
                   else self.scales)
 
-        output = list(inputs)
+        output = list([inputs])
         for scale in scales:
             if isinstance(scale, int):
                 scale = (scale, scale)
@@ -250,15 +250,62 @@ class ImagePyramid(tdl.core.Layer):
 
 
 @tdl.core.create_init_docstring
+class MSG_GeneratorModel(tdl.stacked.StackedLayers):
+    @tdl.core.LazzyProperty
+    def embedding_size(self):
+        tdl.core.assert_initialized(self, 'embedding_size', ['input_shape'])
+        return self.input_shape[-1].value
+
+    @tdl.core.LazzyProperty
+    def pyramid_shapes(self):
+        tdl.core.assert_initialized(
+            self, 'pyramid_shapes', ['embedding_size', 'layers'])
+        _input_shape = tf.TensorShape([None, self.embedding_size])
+        hidden_shapes = list()
+        for layer in self.layers:
+            _input_shape = layer.compute_output_shape(_input_shape)
+            hidden_shapes.append(_input_shape)
+        return hidden_shapes
+
+    @tdl.core.Submodel
+    def projections(self, _):
+        tdl.core.assert_initialized(
+            self, 'projections', ['layers', 'pyramid_shapes'])
+        output_channels = self.pyramid_shapes[-1][-1].value
+        projections = [
+            tdl.stacked.StackedLayers(layers=[
+                tf_layers.Conv2D(
+                    output_channels, kernel_size=(1, 1),
+                    strides=(1, 1), padding='same',
+                    use_bias=False),
+                tf_layers.Activation(tf.keras.activations.tanh)])
+            for i in range(len(self.pyramid_shapes)-1)]
+        return projections
+
+    def pyramid(self, inputs):
+        if self.built is False:
+            self.build(input.shape)
+        pyramid = list()
+        hidden = inputs
+        for layer, projection in zip(self.layers[:-1], self.projections):
+            hidden = layer(hidden)
+            pyramid.append(projection(hidden))
+        pyramid.append(self.layers[-1](hidden))
+        self._update_variables()
+        return pyramid
+
+
+@tdl.core.create_init_docstring
 class MSG_GAN(BaseGAN):
+    GeneratorBaseModel = MSG_GeneratorModel
     InputProjection = MSGProjectionV2
     HiddenGenLayer = MSGHiddenGen
     OutputGenLayer = MSGOutputGen
 
     @tdl.core.SubmodelInit
-    def image_pyramid(self, interpolation='bilinear'):
+    def pyramid(self, interpolation='bilinear'):
         tdl.core.assert_initialized(
-            self, 'image_pyramid', ['target_shape', 'generator'])
+            self, 'pyramid', ['target_shape', 'generator'])
         target_size = self.target_shape[0:2].as_list()
         _input_shape = tf.TensorShape([None, self.embedding_size])
         hidden_shapes = list()
@@ -287,7 +334,14 @@ class MSG_GAN(BaseGAN):
                               learning_rate=0.0002):
         tdl.core.assert_initialized(
             self, 'discriminator_trainer',
-            ['generator', 'discriminator', 'noise_rate'])
-        return DiscriminatorTrainer(
+            ['generator', 'discriminator', 'noise_rate', 'pyramid'])
+        return MSG_DiscriminatorTrainer(
             model=self, batch_size=batch_size, xreal=xreal,
             optimizer={'learning_rate': learning_rate})
+
+
+class MSG_DiscriminatorTrainer(DiscriminatorTrainer):
+    @tdl.core.OutputValue
+    def pyramid(self, _):
+        tdl.core.assert_initialized(self, 'pyramid', ['xreal'])
+        return self.model.pyramid(self.xreal)
