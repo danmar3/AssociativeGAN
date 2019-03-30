@@ -36,7 +36,11 @@ class DcganTest(unittest.TestCase):
         with tf.Session().as_default():
             tdl.core.variables_initializer(gen.variables).run()
             tdl.core.variables_initializer(dis.variables).run()
-            self.assertAlmostEqual(dis.loss.eval(), 0.693, places=3)
+            self.assertAlmostEqual(dis.loss.eval(), 0.693, places=2)
+            assert len(tdl.core.get_variables(model.generator)) == 17
+            assert len(tdl.core.get_variables(model.discriminator)) == 26
+            assert (set(tdl.core.get_variables(model.generator)) &
+                    set(tdl.core.get_variables(model.discriminator))) == set()
 
 
 if __name__ == "__main__":
