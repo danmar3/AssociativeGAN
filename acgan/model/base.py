@@ -62,6 +62,7 @@ class BatchNormalization(tdl.core.Layer):
 
 @tdl.core.create_init_docstring
 class BaseGAN(tdl.core.TdlModel):
+    GeneratorBaseModel = tdl.stacked.StackedLayers
     InputProjection = None
     HiddenGenLayer = None
     OutputGenLayer = None
@@ -92,7 +93,7 @@ class BaseGAN(tdl.core.TdlModel):
         strides = self._to_list(strides, n_layers)
         padding = (padding if isinstance(padding, (list, tuple))
                    else [padding]*n_layers)
-        model = tdl.stacked.StackedLayers()
+        model = self.GeneratorBaseModel()
         model.add(self.InputProjection(projected_shape=init_shape))
         for i in range(len(units)-1):
             model.add(self.HiddenGenLayer(
@@ -128,23 +129,11 @@ class BaseGAN(tdl.core.TdlModel):
         return model
 
     def generator_trainer(self, batch_size, learning_rate=0.0002):
-        tdl.core.assert_initialized(self, 'generator_trainer',
-                                    ['generator', 'discriminator'])
-        noise = tf.random.normal([batch_size, self.embedding_size])
-        xsim = self.generator(noise, training=True)
-        pred = self.discriminator(xsim, training=True)
-        loss = tf.keras.losses.BinaryCrossentropy()(
-            tf.ones_like(pred), pred)
-
-        optimizer = tf.train.AdamOptimizer(learning_rate, beta1=0.5)
-        step = optimizer.minimize(
-            loss, var_list=tdl.core.get_trainable(self.generator))
-        return tdl.core.SimpleNamespace(
-            loss=loss, xsim=xsim, pred=pred, step=step,
-            optimizer=optimizer,
-            variables=(optimizer.variables() +
-                       tdl.core.get_variables(self.generator))
-        )
+        tdl.core.assert_initialized(
+            self, 'generator_trainer', ['generator', 'discriminator'])
+        return GeneratorTrainer(
+            model=self, batch_size=batch_size,
+            optimizer={'learning_rate': learning_rate})
 
     @tdl.core.MethodInit
     def noise_rate(self, local, rate=None):
@@ -152,54 +141,17 @@ class BaseGAN(tdl.core.TdlModel):
 
     @noise_rate.eval
     def noise_rate(self, local, step):
-        if local.rate is None:
-            return None
-        else:
-            return tf.exp(-local.rate * tf.cast(step, tf.float32))
+        return (None if local.rate is None
+                else tf.exp(-local.rate * tf.cast(step, tf.float32)))
 
     def discriminator_trainer(self, batch_size, xreal=None, input_shape=None,
                               learning_rate=0.0002):
-        tdl.core.assert_initialized(self, 'discriminator_trainer',
-                                    ['generator', 'discriminator',
-                                     'noise_rate'])
-        if xreal is None:
-            xreal = tf.keras.Input(shape=input_shape)
-        noise = tf.random.normal([batch_size, self.embedding_size])
-        xsim = self.generator(noise, training=True)
-
-        train_step = tf.Variable(0, dtype=tf.int32, name='disc_train_step')
-        noise_rate = self.noise_rate(train_step)
-        if noise_rate is not None:
-            uniform_noise = tf.random.uniform(shape=tf.shape(xreal),
-                                              minval=0, maxval=1)
-            xreal = tf.where(uniform_noise > noise_rate, xreal,
-                             2*uniform_noise-1)
-            # uniform_noise = tf.random.uniform(shape=tf.shape(xreal),
-            #                                   minval=0, maxval=1)
-            # xsim = tf.where(uniform_noise > noise_rate, xsim,
-            #                 2*uniform_noise-1)
-
-        pred_real = self.discriminator(xreal, training=True)
-        pred_sim = self.discriminator(xsim, training=True)
-        pred = tf.concat([pred_real, pred_sim], axis=0)
-        loss_real = tf.keras.losses.BinaryCrossentropy()(
-            tf.ones_like(pred_real), pred_real)
-        loss_sim = tf.keras.losses.BinaryCrossentropy()(
-            tf.zeros_like(pred_sim), pred_sim)
-        loss = (loss_real + loss_sim)/2.0
-
-        optimizer = tf.train.AdamOptimizer(learning_rate, beta1=0.5)
-        with tf.control_dependencies([train_step.assign_add(1)]):
-            step = optimizer.minimize(
-                loss, var_list=tdl.core.get_trainable(self.discriminator))
-        return tdl.core.SimpleNamespace(
-            loss=loss, xreal=xreal, xsim=xsim,
-            output=pred, step=step, optimizer=optimizer,
-            variables=(optimizer.variables() + [train_step] +
-                       tdl.core.get_variables(self.discriminator)),
-            train_step=train_step,
-            noise_rate=noise_rate
-        )
+        tdl.core.assert_initialized(
+            self, 'discriminator_trainer',
+            ['generator', 'discriminator', 'noise_rate'])
+        return DiscriminatorTrainer(
+            model=self, batch_size=batch_size, xreal=xreal,
+            optimizer={'learning_rate': learning_rate})
 
     def __init__(self, embedding_size, name=None, **kargs):
         self.embedding_size = embedding_size
@@ -209,7 +161,7 @@ class BaseGAN(tdl.core.TdlModel):
 @tdl.core.PropertyShortcuts({'model': ['discriminator', 'generator',
                                        'embedding_size']})
 @tdl.core.create_init_docstring
-class DiscriminatorTrainer(tdl.core.TdlModel):
+class BaseTrainer(tdl.core.TdlModel):
     @tdl.core.InputModel
     def model(self, value):
         return value
@@ -218,10 +170,52 @@ class DiscriminatorTrainer(tdl.core.TdlModel):
     def batch_size(self, value):
         return value
 
+    @tdl.core.SubmodelInit
+    def optimizer(self, learning_rate, beta1=0.5):
+        return tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+
     @tdl.core.LazzyProperty
     def train_step(self):
-        return tf.Variable(0, dtype=tf.int32, name='disc_train_step')
+        return tf.Variable(0, dtype=tf.int32, name='train_step')
 
+
+class GeneratorTrainer(BaseTrainer):
+    @tdl.core.OutputValue
+    def embedding(self, _):
+        return tf.random.normal([self.batch_size, self.embedding_size])
+
+    @tdl.core.OutputValue
+    def xsim(self, _):
+        tdl.core.assert_initialized(self, 'xsim', ['embedding'])
+        xsim = self.generator(self.embedding, training=True)
+        return xsim
+
+    @tdl.core.OutputValue
+    def loss(self, _):
+        tdl.core.assert_initialized(self, 'loss', ['batch_size', 'xsim'])
+        pred = self.discriminator(self.xsim, training=True)
+        loss = tf.keras.losses.BinaryCrossentropy()(
+            tf.ones_like(pred), pred)
+        return loss
+
+    @tdl.core.OutputValue
+    def step(self, _):
+        tdl.core.assert_initialized(
+            self, 'step', ['loss', 'optimizer', 'train_step'])
+        with tf.control_dependencies([self.train_step.assign_add(1)]):
+            step = self.optimizer.minimize(
+                self.loss, var_list=tdl.core.get_trainable(self.generator))
+        return step
+
+    @property
+    def variables(self):
+        tdl.core.assert_initialized(
+            self, 'variables', ['optimizer', 'train_step'])
+        return (self.optimizer.variables() + [self.train_step] +
+                tdl.core.get_variables(self.generator))
+
+
+class DiscriminatorTrainer(BaseTrainer):
     @staticmethod
     def _add_noise(samples, noise_rate):
         uniform_noise = tf.random.uniform(
@@ -243,10 +237,6 @@ class DiscriminatorTrainer(tdl.core.TdlModel):
         noise = tf.random.normal([self.batch_size, self.embedding_size])
         xsim = self.generator(noise, training=True)
         return xsim
-
-    @tdl.core.SubmodelInit
-    def optimizer(self, learning_rate, beta1=0.5):
-        return tf.train.AdamOptimizer(learning_rate, beta1=beta1)
 
     @tdl.core.OutputValue
     def loss(self, _):
@@ -270,7 +260,7 @@ class DiscriminatorTrainer(tdl.core.TdlModel):
                 self.loss, var_list=tdl.core.get_trainable(self.discriminator))
         return step
 
-    @tdl.core.LazzyProperty
+    @property
     def variables(self):
         tdl.core.assert_initialized(
             self, 'variables', ['optimizer', 'train_step'])
