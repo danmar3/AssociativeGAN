@@ -5,7 +5,7 @@ import tensorflow as tf
 import tensorflow.keras.layers as tf_layers
 from .base import (BaseGAN, TransposeLayer, BatchNormalization,
                    compute_output_shape)
-from .msg_gan import MSGProjection
+from .msg_gan import (MSGProjection, MSGProjectionV2)
 
 
 @tdl.core.create_init_docstring

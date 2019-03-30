@@ -20,6 +20,21 @@ PARAMS = {
                 'gen/steps': 1,
                 'dis/steps': 1
                 }
+            },
+        'msg-gan': {
+            'model': {
+                'embedding_size': 128,
+                'generator': {
+                    'init_shape': (7, 7, 256),
+                    'units': [128, 64, 1],
+                    'kernels': 3,
+                    'strides': [2, 2, 1]},
+                'discriminator': {
+                    'units': [64, 128],
+                    'kernels': 3,
+                    'strides': 2,
+                    'dropout': None}
+                }
             }
         },
     'celeb_a': {
