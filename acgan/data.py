@@ -44,4 +44,4 @@ def load_celeb_a(batch_size, split=tfds.Split.TRAIN):
         .batch(batch_size)\
         .map(map_fn)\
         .prefetch(tf.data.experimental.AUTOTUNE)
-    return dataset, info
+    return dataset
