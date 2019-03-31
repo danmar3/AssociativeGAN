@@ -135,9 +135,13 @@ class DiscriminatorTrainer(BaseTrainer):
         return value
 
     @tdl.core.OutputValue
+    def embedding(self, _):
+        return tf.random.normal([self.batch_size, self.embedding_size])
+
+    @tdl.core.OutputValue
     def xsim(self, _):
-        noise = tf.random.normal([self.batch_size, self.embedding_size])
-        xsim = self.generator(noise, training=True)
+        tdl.core.assert_initialized(self, 'xsim', ['embedding'])
+        xsim = self.generator(self.embedding, training=True)
         return xsim
 
     @tdl.core.OutputValue
