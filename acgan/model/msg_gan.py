@@ -1,4 +1,5 @@
-from .base import (BaseGAN, compute_output_shape, DiscriminatorTrainer)
+from .base import (BaseGAN, compute_output_shape, DiscriminatorTrainer,
+                   GeneratorTrainer)
 import typing
 import twodlearn as tdl
 import tensorflow as tf
@@ -102,7 +103,7 @@ class Upsample2D(tdl.core.Layer):
 
 
 @tdl.core.create_init_docstring
-class MSGHiddenGen(tdl.core.Layer):
+class MSG_GeneratorHidden(tdl.core.Layer):
     @tdl.core.InputArgument
     def units(self, value):
         '''Number of output filters.'''
@@ -142,6 +143,7 @@ class MSGHiddenGen(tdl.core.Layer):
         return model
 
     # @tdl.core.SubmodelInit
+    # TODO(daniel): remove when testing is done
     def conv_old(self, kernels, padding):
         tdl.core.assert_initialized(self, 'conv', ['units', 'upsampling'])
         return tf_layers.Conv2DTranspose(
@@ -169,7 +171,7 @@ class MSGHiddenGen(tdl.core.Layer):
 
 
 @tdl.core.create_init_docstring
-class MSGOutputGen(MSGHiddenGen):
+class MSG_GeneratorOutput(MSG_GeneratorHidden):
     @tdl.core.Submodel
     def activation(self, value):
         if value is None:
@@ -273,18 +275,15 @@ class MSG_GeneratorModel(tdl.stacked.StackedLayers):
             self, 'projections', ['layers', 'pyramid_shapes'])
         output_channels = self.pyramid_shapes[-1][-1].value
         projections = [
-            tdl.stacked.StackedLayers(layers=[
-                tf_layers.Conv2D(
-                    output_channels, kernel_size=(1, 1),
-                    strides=(1, 1), padding='same',
-                    use_bias=False),
-                tf_layers.Activation(tf.keras.activations.tanh)])
+            tdl.convnet.Conv1x1Proj(
+                units=output_channels, bias=None,
+                activation=tf.keras.activations.tanh)
             for i in range(len(self.pyramid_shapes)-1)]
         return projections
 
     def pyramid(self, inputs):
         if self.built is False:
-            self.build(input.shape)
+            self.build(inputs.shape)
         pyramid = list()
         hidden = inputs
         for layer, projection in zip(self.layers[:-1], self.projections):
@@ -295,15 +294,47 @@ class MSG_GeneratorModel(tdl.stacked.StackedLayers):
         return pyramid
 
 
+class MSG_DiscriminatorModel(tdl.stacked.StackedLayers):
+    pass
+
+
+class MSG_GeneratorTrainer(GeneratorTrainer):
+    @tdl.core.OutputValue
+    def sim_pyramid(self, _):
+        tdl.core.assert_initialized(self, 'sim_pyramid', ['embedding'])
+        return self.generator.pyramid(self.embedding)
+
+    @tdl.core.OutputValue
+    def xsim(self, _):
+        tdl.core.assert_initialized(self, 'xsim', ['sim_pyramid'])
+        return self.sim_pyramid[-1]
+
+
+class MSG_DiscriminatorTrainer(DiscriminatorTrainer):
+    @tdl.core.OutputValue
+    def real_pyramid(self, _):
+        tdl.core.assert_initialized(self, 'real_pyramid', ['xreal'])
+        return self.model.pyramid(self.xreal)
+
+
 @tdl.core.create_init_docstring
 class MSG_GAN(BaseGAN):
+    def DiscriminatorBaseModel(self):
+        return tdl.stacked.StackedLayers()
+
     GeneratorBaseModel = MSG_GeneratorModel
     InputProjection = MSGProjectionV2
-    HiddenGenLayer = MSGHiddenGen
-    OutputGenLayer = MSGOutputGen
+    GeneratorHidden = MSG_GeneratorHidden
+    GeneratorOutput = MSG_GeneratorOutput
+
+    GeneratorTrainer = MSG_GeneratorTrainer
+    DiscriminatorTrainer = MSG_DiscriminatorTrainer
 
     @tdl.core.SubmodelInit
     def pyramid(self, interpolation='bilinear'):
+        '''layer that creates an image pyramid by performing several
+           sub-sampling operations.
+        '''
         tdl.core.assert_initialized(
             self, 'pyramid', ['target_shape', 'generator'])
         target_size = self.target_shape[0:2].as_list()
@@ -335,13 +366,6 @@ class MSG_GAN(BaseGAN):
         tdl.core.assert_initialized(
             self, 'discriminator_trainer',
             ['generator', 'discriminator', 'noise_rate', 'pyramid'])
-        return MSG_DiscriminatorTrainer(
+        return self.DiscriminatorTrainer(
             model=self, batch_size=batch_size, xreal=xreal,
             optimizer={'learning_rate': learning_rate})
-
-
-class MSG_DiscriminatorTrainer(DiscriminatorTrainer):
-    @tdl.core.OutputValue
-    def pyramid(self, _):
-        tdl.core.assert_initialized(self, 'pyramid', ['xreal'])
-        return self.model.pyramid(self.xreal)

@@ -9,7 +9,7 @@ from .msg_gan import (MSGProjection, MSGProjectionV2)
 
 
 @tdl.core.create_init_docstring
-class DCGANHiddenGen(TransposeLayer, BatchNormalization):
+class DCGAN_GeneratorHidden(TransposeLayer, BatchNormalization):
     @tdl.core.Submodel
     def activation(self, value):
         if value is None:
@@ -30,7 +30,7 @@ class DCGANHiddenGen(TransposeLayer, BatchNormalization):
 
 
 @tdl.core.create_init_docstring
-class DCGANOutputGen(TransposeLayer):
+class DCGAN_GeneratorOutput(TransposeLayer):
     @tdl.core.Submodel
     def activation(self, value):
         if value is None:
@@ -39,7 +39,7 @@ class DCGANOutputGen(TransposeLayer):
 
 
 @tdl.core.create_init_docstring
-class DCGANProjection(tdl.stacked.StackedLayers):
+class DCGAN_Projection(tdl.stacked.StackedLayers):
     @tdl.core.InputArgument
     def projected_shape(self, value):
         value = tf.TensorShape(value)
@@ -60,5 +60,5 @@ class DCGANProjection(tdl.stacked.StackedLayers):
 @tdl.core.create_init_docstring
 class DCGAN(BaseGAN):
     InputProjection = MSGProjection
-    HiddenGenLayer = DCGANHiddenGen
-    OutputGenLayer = DCGANOutputGen
+    GeneratorHidden = DCGAN_GeneratorHidden
+    GeneratorOutput = DCGAN_GeneratorOutput

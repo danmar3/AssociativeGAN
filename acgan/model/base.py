@@ -60,104 +60,6 @@ class BatchNormalization(tdl.core.Layer):
         return None
 
 
-@tdl.core.create_init_docstring
-class BaseGAN(tdl.core.TdlModel):
-    GeneratorBaseModel = tdl.stacked.StackedLayers
-    InputProjection = None
-    HiddenGenLayer = None
-    OutputGenLayer = None
-
-    @staticmethod
-    def _to_list(value, n_elements):
-        if isinstance(value, int):
-            value = [value]*n_elements
-        if isinstance(value[0], int):
-            value = [[vi, vi] for vi in value]
-        assert len(value) == n_elements, \
-            'list does not have the expected number of elements'
-        assert all([len(vi) == 2 for vi in value]), \
-            'list does not have the expected number of elements'
-        return value
-
-    @tdl.core.LazzyProperty
-    def target_shape(self):
-        tdl.core.assert_initialized(self, 'target_shape', ['generator'])
-        return self.generator.compute_output_shape(
-            [None, self.embedding_size])[1:]
-
-    @tdl.core.SubmodelInit
-    def generator(self, init_shape, units, kernels=5, strides=2,
-                  padding='same'):
-        n_layers = len(units)
-        kernels = self._to_list(kernels, n_layers)
-        strides = self._to_list(strides, n_layers)
-        padding = (padding if isinstance(padding, (list, tuple))
-                   else [padding]*n_layers)
-        model = self.GeneratorBaseModel()
-        model.add(self.InputProjection(projected_shape=init_shape))
-        for i in range(len(units)-1):
-            model.add(self.HiddenGenLayer(
-                units=units[i], upsampling=strides[i],
-                conv={'kernels': kernels[i], 'padding': padding[i]}))
-        model.add(self.OutputGenLayer(
-                units=units[-1], upsampling=strides[-1],
-                conv={'kernels': kernels[-1], 'padding': padding[-1]}))
-        return model
-
-    @tdl.core.SubmodelInit
-    def discriminator(self, units, kernels, strides, dropout=None,
-                      padding='same'):
-        n_layers = len(units)
-        kernels = self._to_list(kernels, n_layers)
-        strides = self._to_list(strides, n_layers)
-        padding = (padding if isinstance(padding, (list, tuple))
-                   else [padding]*n_layers)
-        model = tdl.stacked.StackedLayers()
-
-        for i in range(len(units)):
-            model.add(tf_layers.Conv2D(
-                units[i], kernels[i], strides=strides[i],
-                padding=padding[i]))
-            model.add(tf.keras.layers.BatchNormalization())
-            model.add(tf_layers.LeakyReLU(0.2))
-            # model.add(tf_layers.Activation(tf.keras.activations.softplus))
-            if dropout is not None:
-                model.add(tf_layers.Dropout(dropout))
-        model.add(tf_layers.Flatten())
-        model.add(tf_layers.Dense(1))
-        model.add(tf_layers.Activation(tf.keras.activations.sigmoid))
-        return model
-
-    def generator_trainer(self, batch_size, learning_rate=0.0002):
-        tdl.core.assert_initialized(
-            self, 'generator_trainer', ['generator', 'discriminator'])
-        return GeneratorTrainer(
-            model=self, batch_size=batch_size,
-            optimizer={'learning_rate': learning_rate})
-
-    @tdl.core.MethodInit
-    def noise_rate(self, local, rate=None):
-        local.rate = rate
-
-    @noise_rate.eval
-    def noise_rate(self, local, step):
-        return (None if local.rate is None
-                else tf.exp(-local.rate * tf.cast(step, tf.float32)))
-
-    def discriminator_trainer(self, batch_size, xreal=None, input_shape=None,
-                              learning_rate=0.0002):
-        tdl.core.assert_initialized(
-            self, 'discriminator_trainer',
-            ['generator', 'discriminator', 'noise_rate'])
-        return DiscriminatorTrainer(
-            model=self, batch_size=batch_size, xreal=xreal,
-            optimizer={'learning_rate': learning_rate})
-
-    def __init__(self, embedding_size, name=None, **kargs):
-        self.embedding_size = embedding_size
-        super(BaseGAN, self).__init__(name=None, **kargs)
-
-
 @tdl.core.PropertyShortcuts({'model': ['discriminator', 'generator',
                                        'embedding_size']})
 @tdl.core.create_init_docstring
@@ -266,3 +168,130 @@ class DiscriminatorTrainer(BaseTrainer):
             self, 'variables', ['optimizer', 'train_step'])
         return (self.optimizer.variables() + [self.train_step] +
                 tdl.core.get_variables(self.discriminator))
+
+
+class DiscriminatorHidden(tdl.stacked.StackedLayers):
+    @tdl.core.Submodel
+    def layers(self, _):
+        value = [tf_layers.Conv2D(
+                    self.units, self.kernels, strides=self.strides,
+                    padding=self.padding),
+                 tf.keras.layers.BatchNormalization(),
+                 tf_layers.LeakyReLU(0.2)]
+        if self.dropout is not None:
+            value.append(tf_layers.Dropout(self.dropout))
+        return value
+
+    def __init__(self, units, kernels, strides, padding, dropout, **kargs):
+        self.units = units
+        self.kernels = kernels
+        self.strides = strides
+        self.padding = padding
+        self.dropout = dropout
+        super(DiscriminatorHidden, self).__init__(**kargs)
+
+
+class DiscriminatorOutput(tdl.stacked.StackedLayers):
+    @tdl.core.Submodel
+    def layers(self, _):
+        value = [tf_layers.Flatten(),
+                 tf_layers.Dense(1),
+                 tf_layers.Activation(tf.keras.activations.sigmoid)]
+        return value
+
+
+@tdl.core.create_init_docstring
+class BaseGAN(tdl.core.TdlModel):
+    GeneratorBaseModel = tdl.stacked.StackedLayers
+    InputProjection = None
+    GeneratorHidden = None
+    GeneratorOutput = None
+    GeneratorTrainer = GeneratorTrainer
+
+    DiscriminatorBaseModel = tdl.stacked.StackedLayers
+    DiscriminatorHidden = DiscriminatorHidden
+    DiscriminatorOutput = DiscriminatorOutput
+    DiscriminatorTrainer = DiscriminatorTrainer
+
+    @staticmethod
+    def _to_list(value, n_elements):
+        if isinstance(value, int):
+            value = [value]*n_elements
+        if isinstance(value[0], int):
+            value = [[vi, vi] for vi in value]
+        assert len(value) == n_elements, \
+            'list does not have the expected number of elements'
+        assert all([len(vi) == 2 for vi in value]), \
+            'list does not have the expected number of elements'
+        return value
+
+    @tdl.core.LazzyProperty
+    def target_shape(self):
+        tdl.core.assert_initialized(self, 'target_shape', ['generator'])
+        return self.generator.compute_output_shape(
+            [None, self.embedding_size])[1:]
+
+    @tdl.core.SubmodelInit
+    def generator(self, init_shape, units, kernels=5, strides=2,
+                  padding='same'):
+        n_layers = len(units)
+        kernels = self._to_list(kernels, n_layers)
+        strides = self._to_list(strides, n_layers)
+        padding = (padding if isinstance(padding, (list, tuple))
+                   else [padding]*n_layers)
+        model = self.GeneratorBaseModel()
+        model.add(self.InputProjection(projected_shape=init_shape))
+        for i in range(len(units)-1):
+            model.add(self.GeneratorHidden(
+                units=units[i], upsampling=strides[i],
+                conv={'kernels': kernels[i], 'padding': padding[i]}))
+        model.add(self.GeneratorOutput(
+                units=units[-1], upsampling=strides[-1],
+                conv={'kernels': kernels[-1], 'padding': padding[-1]}))
+        return model
+
+    @tdl.core.SubmodelInit
+    def discriminator(self, units, kernels, strides, dropout=None,
+                      padding='same'):
+        n_layers = len(units)
+        kernels = self._to_list(kernels, n_layers)
+        strides = self._to_list(strides, n_layers)
+        padding = (padding if isinstance(padding, (list, tuple))
+                   else [padding]*n_layers)
+
+        model = self.DiscriminatorBaseModel()
+        for i in range(len(units)):
+            model.add(self.DiscriminatorHidden(
+                units=units[i], kernels=kernels[i], strides=strides[i],
+                padding=padding[i], dropout=dropout))
+        model.add(self.DiscriminatorOutput())
+        return model
+
+    def generator_trainer(self, batch_size, learning_rate=0.0002):
+        tdl.core.assert_initialized(
+            self, 'generator_trainer', ['generator', 'discriminator'])
+        return self.GeneratorTrainer(
+            model=self, batch_size=batch_size,
+            optimizer={'learning_rate': learning_rate})
+
+    @tdl.core.MethodInit
+    def noise_rate(self, local, rate=None):
+        local.rate = rate
+
+    @noise_rate.eval
+    def noise_rate(self, local, step):
+        return (None if local.rate is None
+                else tf.exp(-local.rate * tf.cast(step, tf.float32)))
+
+    def discriminator_trainer(self, batch_size, xreal=None, input_shape=None,
+                              learning_rate=0.0002):
+        tdl.core.assert_initialized(
+            self, 'discriminator_trainer',
+            ['generator', 'discriminator', 'noise_rate'])
+        return self.DiscriminatorTrainer(
+            model=self, batch_size=batch_size, xreal=xreal,
+            optimizer={'learning_rate': learning_rate})
+
+    def __init__(self, embedding_size, name=None, **kargs):
+        self.embedding_size = embedding_size
+        super(BaseGAN, self).__init__(name=None, **kargs)
