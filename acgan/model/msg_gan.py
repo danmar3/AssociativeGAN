@@ -295,7 +295,51 @@ class MSG_GeneratorModel(tdl.stacked.StackedLayers):
 
 
 class MSG_DiscriminatorModel(tdl.stacked.StackedLayers):
-    pass
+    @tdl.core.LazzyProperty
+    def hidden_shapes(self):
+        tdl.core.assert_initialized(self, 'pyramid_shapes', ['input_shape'])
+        _input_shape = self.input_shape
+        hidden_shapes = list()
+        for layer in self.layers[:-1]:
+            _input_shape = layer.compute_output_shape(_input_shape)
+            hidden_shapes.append(_input_shape)
+        return hidden_shapes
+
+    @tdl.core.Submodel
+    def projections(self, _):
+        tdl.core.assert_initialized(
+            self, 'projections', ['layers', 'input_shape'])
+        projections = list()
+        for layer in self.layers[:-1]:
+            projections.append(
+                tdl.convnet.Conv1x1Proj(
+                    units=layer.units, bias=None,
+                    activation=tf_layers.LeakyReLU(0.2)
+                ))
+        return projections
+
+    @staticmethod
+    def _size_matches(shape1, shape2):
+        '''check if the shapes match one another'''
+        return shape1[1:3].as_list() == shape2[1:3].as_list()
+
+    @staticmethod
+    def _eval_chain(chain, inputs):
+        hidden = inputs
+        for layer in chain:
+            hidden = layer(hidden)
+        return hidden
+
+    def call(self, inputs, **kargs):
+        if self._size_matches(inputs.shape, self.input_shape):
+            return self._eval_chain(self.layers, inputs)
+        for idx, (shape, proj) in enumerate(
+                zip(self.hidden_shapes, self.projections)):
+            if self._size_matches(inputs.shape, shape):
+                chain = [proj] + self.layers[idx+1:]
+                return self._eval_chain(chain, inputs)
+        # raise error if no size matches
+        raise ValueError('invalid input shape {}'.format(inputs.shape))
 
 
 class MSG_GeneratorTrainer(GeneratorTrainer):
@@ -319,15 +363,14 @@ class MSG_DiscriminatorTrainer(DiscriminatorTrainer):
 
 @tdl.core.create_init_docstring
 class MSG_GAN(BaseGAN):
-    def DiscriminatorBaseModel(self):
-        return tdl.stacked.StackedLayers()
-
     GeneratorBaseModel = MSG_GeneratorModel
     InputProjection = MSGProjectionV2
     GeneratorHidden = MSG_GeneratorHidden
     GeneratorOutput = MSG_GeneratorOutput
-
     GeneratorTrainer = MSG_GeneratorTrainer
+
+    def DiscriminatorBaseModel(self):
+        return MSG_DiscriminatorModel()
     DiscriminatorTrainer = MSG_DiscriminatorTrainer
 
     @tdl.core.SubmodelInit
