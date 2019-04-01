@@ -25,15 +25,20 @@ PARAMS = {
             'model': {
                 'embedding_size': 128,
                 'generator': {
-                    'init_shape': (7, 7, 256),
-                    'units': [128, 64, 1],
+                    'init_shape': (4, 4, 128),
+                    'units': [64, 32, 1],
                     'kernels': 3,
-                    'strides': [2, 2, 1]},
+                    'strides': [2, 2, 2],
+                    'padding': ['same', 'same', 'same', 'same']},
                 'discriminator': {
-                    'units': [64, 128],
+                    'units': [32, 64, 128],
                     'kernels': 3,
-                    'strides': 2,
-                    'dropout': None}
+                    'strides': [2, 2, 2],
+                    'dropout': 0.3}
+                },
+            'train': {
+                'generator': {'regularizer': {'scale': 0.001}},
+                'discriminator': {'regularizer': {'scale': 0.001}}
                 }
             }
         },

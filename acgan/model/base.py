@@ -243,7 +243,8 @@ class BaseGAN(tdl.core.TdlModel):
         strides = self._to_list(strides, n_layers)
         padding = (padding if isinstance(padding, (list, tuple))
                    else [padding]*n_layers)
-        model = self.GeneratorBaseModel()
+        model = self.GeneratorBaseModel(
+            input_shape=[None, self.embedding_size])
         model.add(self.InputProjection(projected_shape=init_shape))
         for i in range(len(units)-1):
             model.add(self.GeneratorHidden(
@@ -271,12 +272,13 @@ class BaseGAN(tdl.core.TdlModel):
         model.add(self.DiscriminatorOutput())
         return model
 
-    def generator_trainer(self, batch_size, learning_rate=0.0002):
+    def generator_trainer(self, batch_size, learning_rate=0.0002, **kwargs):
         tdl.core.assert_initialized(
             self, 'generator_trainer', ['generator', 'discriminator'])
         return self.GeneratorTrainer(
             model=self, batch_size=batch_size,
-            optimizer={'learning_rate': learning_rate})
+            optimizer={'learning_rate': learning_rate},
+            **kwargs)
 
     @tdl.core.MethodInit
     def noise_rate(self, local, rate=None):
@@ -288,13 +290,14 @@ class BaseGAN(tdl.core.TdlModel):
                 else tf.exp(-local.rate * tf.cast(step, tf.float32)))
 
     def discriminator_trainer(self, batch_size, xreal=None, input_shape=None,
-                              learning_rate=0.0002):
+                              learning_rate=0.0002, **kwargs):
         tdl.core.assert_initialized(
             self, 'discriminator_trainer',
             ['generator', 'discriminator', 'noise_rate'])
         return self.DiscriminatorTrainer(
             model=self, batch_size=batch_size, xreal=xreal,
-            optimizer={'learning_rate': learning_rate})
+            optimizer={'learning_rate': learning_rate},
+            **kwargs)
 
     def __init__(self, embedding_size, name=None, **kargs):
         self.embedding_size = embedding_size

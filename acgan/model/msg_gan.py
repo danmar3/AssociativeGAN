@@ -133,13 +133,13 @@ class MSG_GeneratorHidden(tdl.core.Layer):
                 self.units, kernel_size=kernels,
                 strides=(1, 1), padding=padding,
                 use_bias=False))
-        # model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.BatchNormalization())
         model.add(tf_layers.LeakyReLU(0.2))
         model.add(tf_layers.Conv2D(
                 self.units, kernel_size=kernels,
                 strides=(1, 1), padding=padding,
                 use_bias=True))
-        # model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.BatchNormalization())
         return model
 
     # @tdl.core.SubmodelInit
@@ -253,31 +253,68 @@ class ImagePyramid(tdl.core.Layer):
 
 @tdl.core.create_init_docstring
 class MSG_GeneratorModel(tdl.stacked.StackedLayers):
-    @tdl.core.LazzyProperty
-    def embedding_size(self):
-        tdl.core.assert_initialized(self, 'embedding_size', ['input_shape'])
-        return self.input_shape[-1].value
+    @tdl.core.InputArgument
+    def input_shape(self, value):
+        if value is None:
+            tdl.core.assert_initialized_if_available(
+                self, 'input_shape', ['embedding_size'])
+            if tdl.core.is_property_initialized(self, 'embedding_size'):
+                value = tf.TensorShape([None, self.embedding_size])
+            else:
+                raise tdl.core.exceptions.ArgumentNotProvided(self)
+        return tf.TensorShape(value)
+
+    @tdl.core.InputArgument
+    def embedding_size(self, value: typing.Union[int, None]):
+        if value is None:
+            tdl.core.assert_initialized(
+                self, 'embedding_size', ['input_shape'])
+            value = self.input_shape[-1].value
+        return value
 
     @tdl.core.LazzyProperty
-    def pyramid_shapes(self):
+    def hidden_shapes(self):
         tdl.core.assert_initialized(
-            self, 'pyramid_shapes', ['embedding_size', 'layers'])
+            self, 'hidden_shapes', ['embedding_size', 'layers'])
         _input_shape = tf.TensorShape([None, self.embedding_size])
         hidden_shapes = list()
-        for layer in self.layers:
+        for layer in self.layers[:-1]:
             _input_shape = layer.compute_output_shape(_input_shape)
             hidden_shapes.append(_input_shape)
         return hidden_shapes
 
-    @tdl.core.Submodel
-    def projections(self, _):
+    @tdl.core.LazzyProperty
+    def output_shape(self):
+        tdl.core.assert_initialized(self, 'output_shape', ['hidden_shapes'])
+        return self.layers[-1].compute_output_shape(self.hidden_shapes[-1])
+
+    @tdl.core.LazzyProperty
+    def pyramid_shapes(self):
         tdl.core.assert_initialized(
-            self, 'projections', ['layers'])
+            self, 'pyramid_shapes', ['hidden_shapes', 'projections',
+                                     'output_shape'])
+        shapes = list()
+        for proj, hidden_shape in zip(self.projections, self.hidden_shapes):
+            shapes.append(proj.compute_output_shape(hidden_shape))
+        shapes.append(self.output_shape)
+        return shapes
+
+    @tdl.core.Submodel
+    def projections(self, value):
+        if value is not None:
+            return value
+        tdl.core.assert_initialized(self, 'projections', ['layers'])
+        if tdl.core.any_initialized(self, ['input_shape', 'embedding_size']):
+            tdl.core.assert_initialized(self, 'projections', ['hidden_shapes'])
+            kargs = [{'input_shape': shape} for shape in self.hidden_shapes]
+        else:
+            kargs = [{} for i in range(len(self.layers))]
         output_channels = self.layers[-1].units
         projections = [
             tdl.convnet.Conv1x1Proj(
                 units=output_channels, bias=None,
-                activation=tf.keras.activations.tanh)
+                activation=tf.keras.activations.tanh,
+                **kargs[i])
             for i in range(len(self.layers)-1)]
         return projections
 
@@ -297,7 +334,7 @@ class MSG_GeneratorModel(tdl.stacked.StackedLayers):
 class MSG_DiscriminatorModel(tdl.stacked.StackedLayers):
     @tdl.core.LazzyProperty
     def hidden_shapes(self):
-        tdl.core.assert_initialized(self, 'pyramid_shapes', ['input_shape'])
+        tdl.core.assert_initialized(self, 'hidden_shapes', ['input_shape'])
         _input_shape = self.input_shape
         hidden_shapes = list()
         for layer in self.layers[:-1]:
@@ -306,7 +343,9 @@ class MSG_DiscriminatorModel(tdl.stacked.StackedLayers):
         return hidden_shapes
 
     @tdl.core.Submodel
-    def projections(self, _):
+    def projections(self, value):
+        if value is not None:
+            return value
         tdl.core.assert_initialized(
             self, 'projections', ['layers', 'input_shape'])
         projections = list()
@@ -357,10 +396,16 @@ class MSG_GeneratorTrainer(GeneratorTrainer):
         tdl.core.assert_initialized(self, 'xsim', ['sim_pyramid'])
         return self.sim_pyramid[-1]
 
+    @tdl.core.SubmodelInit
+    def regularizer(self, scale=None):
+        if scale is None:
+            return None
+        return tdl.core.SimpleNamespace(scale=scale)
+
     @tdl.core.OutputValue
     def loss(self, _):
         tdl.core.assert_initialized(
-            self, 'loss', ['batch_size', 'xsim', 'sim_pyramid'])
+            self, 'loss', ['batch_size', 'xsim', 'sim_pyramid', 'regularizer'])
         losses = list()
         for xsim in self.sim_pyramid[::-1]:
             pred = self.discriminator(xsim, training=True)
@@ -368,6 +413,14 @@ class MSG_GeneratorTrainer(GeneratorTrainer):
                 tf.ones_like(pred), pred)
             losses.append(loss_i)
         loss = tf.add_n(losses)/len(losses)
+        # regularizer
+        if self.regularizer is not None:
+            layers = tdl.core.find_instances(
+                self.generator, tf.keras.layers.Conv2D)
+            loss += self.regularizer.scale*tf.add_n(
+                [tf.reduce_mean(tf.abs(layer.kernel))
+                 for layer in layers]
+            )
         return loss
 
 
@@ -399,10 +452,27 @@ class MSG_DiscriminatorHidden(tdl.stacked.StackedLayers):
         super(MSG_DiscriminatorHidden, self).__init__(**kargs)
 
 
+class Conv2DLayer(tdl.convnet.Conv2DLayer):
+    @tdl.core.InputArgument
+    def filters(self, value):
+        '''Number of filters (int), equal to the number of output maps.'''
+        if value is None:
+            tdl.core.assert_initialized(self, 'filters', ['input_shape'])
+            value = self.input_shape[-1].value
+        if not isinstance(value, int):
+            raise TypeError('filters must be an integer')
+        return value
+
+
 class MSG_DiscriminatorOutput(tdl.stacked.StackedLayers):
     @tdl.core.Submodel
     def layers(self, _):
         value = [
+            tf.keras.layers.BatchNormalization(),
+            Conv2DLayer(kernel_size=(3, 3)),
+            tf_layers.LeakyReLU(0.2),
+            Conv2DLayer(kernel_size=(4, 4)),
+            tf_layers.LeakyReLU(0.2),
             tf_layers.Flatten(),
             tf_layers.Dense(1),
             tf_layers.Activation(tf.keras.activations.sigmoid)]
@@ -420,10 +490,16 @@ class MSG_DiscriminatorTrainer(DiscriminatorTrainer):
         tdl.core.assert_initialized(self, 'sim_pyramid', ['embedding'])
         return self.generator.pyramid(self.embedding)
 
+    @tdl.core.SubmodelInit
+    def regularizer(self, scale=None):
+        if scale is None:
+            return None
+        return tdl.core.SimpleNamespace(scale=scale)
+
     @tdl.core.OutputValue
     def loss(self, _):
         tdl.core.assert_initialized(
-            self, 'loss', ['real_pyramid', 'sim_pyramid'])
+            self, 'loss', ['real_pyramid', 'sim_pyramid', 'regularizer'])
         # real losses
         real_losses = list()
         for xreal in self.real_pyramid:
@@ -440,6 +516,14 @@ class MSG_DiscriminatorTrainer(DiscriminatorTrainer):
             sim_losses.append(loss_i)
         losses = real_losses + sim_losses
         loss = tf.add_n(losses)/len(losses)
+        # Regularizer
+        if self.regularizer is not None:
+            layers = tdl.core.find_instances(
+                self.discriminator, tf.keras.layers.Conv2D)
+            loss += self.regularizer.scale*tf.add_n(
+                [tf.reduce_mean(tf.abs(layer.kernel))
+                 for layer in layers]
+            )
         return loss
 
 
@@ -451,12 +535,14 @@ class MSG_GAN(BaseGAN):
     GeneratorOutput = MSG_GeneratorOutput
     GeneratorTrainer = MSG_GeneratorTrainer
 
-    def DiscriminatorBaseModel(self):
+    def DiscriminatorBaseModel(self, **kargs):
         tdl.core.assert_initialized(self, 'discriminator', ['generator'])
-        # TODO(daniel): use projections from generator
-        # tdl.core.assert_initialized(
-        #     self.generator, 'discriminator', ['projections'])
-        return MSG_DiscriminatorModel()
+        tdl.core.assert_initialized(
+            self.generator, 'discriminator', ['projections'])
+
+        return MSG_DiscriminatorModel(
+            projections=[proj.get_transpose()
+                         for proj in self.generator.projections[::-1]])
     DiscriminatorHidden = MSG_DiscriminatorHidden
     DiscriminatorTrainer = MSG_DiscriminatorTrainer
 
@@ -492,10 +578,11 @@ class MSG_GAN(BaseGAN):
         return ImagePyramid(scales=scaling)
 
     def discriminator_trainer(self, batch_size, xreal=None, input_shape=None,
-                              learning_rate=0.0002):
+                              learning_rate=0.0002, **kwargs):
         tdl.core.assert_initialized(
             self, 'discriminator_trainer',
             ['generator', 'discriminator', 'noise_rate', 'pyramid'])
         return self.DiscriminatorTrainer(
             model=self, batch_size=batch_size, xreal=xreal,
-            optimizer={'learning_rate': learning_rate})
+            optimizer={'learning_rate': learning_rate},
+            **kwargs)
