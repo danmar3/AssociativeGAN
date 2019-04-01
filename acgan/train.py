@@ -30,8 +30,8 @@ def run_training(dis, gen, n_steps=1000, n_logging=100, session=None):
         # optimize discriminator
         dis_steps = max(1, int(dis_loss//gen_loss))
         dis_steps = min(dis_steps, MAX_UPDATE_STEPS)
-        dis_steps = (dis_steps if dis.train_step.eval() > 500
-                     else 1)  # only one during first iterations
+        # dis_steps = (dis_steps if dis.train_step.eval() > 500
+        #              else 1)  # only one during first iterations
         for j in range(dis_steps):
             _, dis_loss, gen_loss = session.run([dis.step, dis.loss, gen.loss])
             done, steps = update_log(steps, progress_bar)

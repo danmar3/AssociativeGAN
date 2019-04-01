@@ -34,11 +34,11 @@ PARAMS = {
                     'units': [32, 64, 128],
                     'kernels': 3,
                     'strides': [2, 2, 2],
-                    'dropout': 0.3}
+                    'dropout': 0.1}
                 },
             'train': {
-                'generator': {'regularizer': {'scale': 0.001}},
-                'discriminator': {'regularizer': {'scale': 0.001}}
+                'generator': {'regularizer': {'scale': 1e-5}},
+                'discriminator': {'regularizer': {'scale': 1e-5}}
                 }
             }
         },

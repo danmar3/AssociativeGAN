@@ -117,21 +117,21 @@ class GeneratorTrainer(BaseTrainer):
                 tdl.core.get_variables(self.generator))
 
 
-class DiscriminatorTrainer(BaseTrainer):
-    @staticmethod
-    def _add_noise(samples, noise_rate):
-        uniform_noise = tf.random.uniform(
-            shape=tf.shape(samples), minval=0, maxval=1)
-        output = tf.where(uniform_noise > noise_rate, samples,
-                          2*uniform_noise-1)
-        return output
+def _add_noise(samples, noise_rate):
+    uniform_noise = tf.random.uniform(
+        shape=tf.shape(samples), minval=0, maxval=1)
+    output = tf.where(uniform_noise > noise_rate, samples,
+                      2*uniform_noise-1)
+    return output
 
+
+class DiscriminatorTrainer(BaseTrainer):
     @tdl.core.InputArgument
     def xreal(self, value):
         tdl.core.assert_initialized(self, 'xreal', ['train_step'])
         noise_rate = self.model.noise_rate(self.train_step)
         if noise_rate is not None:
-            value = self._add_noise(value, noise_rate)
+            value = _add_noise(value, noise_rate)
         return value
 
     @tdl.core.OutputValue
@@ -142,6 +142,9 @@ class DiscriminatorTrainer(BaseTrainer):
     def xsim(self, _):
         tdl.core.assert_initialized(self, 'xsim', ['embedding'])
         xsim = self.generator(self.embedding, training=True)
+        noise_rate = self.model.noise_rate(self.train_step)
+        if noise_rate is not None:
+            xsim = _add_noise(xsim, noise_rate)
         return xsim
 
     @tdl.core.OutputValue
