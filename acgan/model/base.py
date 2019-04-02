@@ -60,6 +60,47 @@ class BatchNormalization(tdl.core.Layer):
         return None
 
 
+@tdl.core.create_init_docstring
+class MinibatchStddev(tdl.core.Layer):
+    @tdl.core.InputArgument
+    def tolerance(self, value):
+        if value is None:
+            value = 1e-8
+        return value
+
+    def compute_output_shape(self, input_shape):
+        input_shape = tf.TensorShape(input_shape)
+        return input_shape[:-1].concatenate(input_shape[-1].value + 1)
+
+    def call(self, inputs):
+        assert inputs.shape.ndims == 4, 'input must be a 4D tensor'
+        inputs = tf.convert_to_tensor(inputs)
+        diff = inputs - tf.reduce_mean(inputs, axis=0)[tf.newaxis, ...]
+        # [1, H, W, D]
+        stddev = tf.sqrt(tf.reduce_mean(diff**2.0, axis=0)
+                         + self.tolerance)[tf.newaxis, ...]
+        c_value = tf.fill(tf.shape(inputs)[:-1],
+                          tf.reduce_mean(stddev))[..., tf.newaxis]
+        return tf.concat([inputs, c_value], axis=-1)
+
+
+@tdl.core.create_init_docstring
+class VectorNormalizer(tdl.core.Layer):
+    @tdl.core.InputArgument
+    def tolerance(self, value):
+        if value is None:
+            value = 1e-8
+        return value
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+    def call(self, inputs):
+        inputs = tf.convert_to_tensor(inputs)
+        moment2 = tf.reduce_mean(inputs**2, axis=-1) + self.tolerance
+        return inputs/tf.sqrt(moment2[..., tf.newaxis])
+
+
 @tdl.core.PropertyShortcuts({'model': ['discriminator', 'generator',
                                        'embedding_size']})
 @tdl.core.create_init_docstring
@@ -275,12 +316,13 @@ class BaseGAN(tdl.core.TdlModel):
         model.add(self.DiscriminatorOutput())
         return model
 
-    def generator_trainer(self, batch_size, learning_rate=0.0002, **kwargs):
+    def generator_trainer(self, batch_size, learning_rate=0.0002, beta1=0.5,
+                          **kwargs):
         tdl.core.assert_initialized(
             self, 'generator_trainer', ['generator', 'discriminator'])
         return self.GeneratorTrainer(
             model=self, batch_size=batch_size,
-            optimizer={'learning_rate': learning_rate},
+            optimizer={'learning_rate': learning_rate, 'beta1': beta1},
             **kwargs)
 
     @tdl.core.MethodInit
@@ -293,13 +335,14 @@ class BaseGAN(tdl.core.TdlModel):
                 else tf.exp(-local.rate * tf.cast(step, tf.float32)))
 
     def discriminator_trainer(self, batch_size, xreal=None, input_shape=None,
-                              learning_rate=0.0002, **kwargs):
+                              learning_rate=0.0002, beta1=0.5,
+                              **kwargs):
         tdl.core.assert_initialized(
             self, 'discriminator_trainer',
             ['generator', 'discriminator', 'noise_rate'])
         return self.DiscriminatorTrainer(
             model=self, batch_size=batch_size, xreal=xreal,
-            optimizer={'learning_rate': learning_rate},
+            optimizer={'learning_rate': learning_rate, 'beta1': beta1},
             **kwargs)
 
     def __init__(self, embedding_size, name=None, **kargs):
