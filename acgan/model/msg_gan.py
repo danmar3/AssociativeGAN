@@ -8,7 +8,7 @@ import tensorflow as tf
 import tensorflow.keras.layers as tf_layers
 
 
-USE_BIAS = False
+USE_BIAS = {'generator': False, 'discriminator': True}
 LEAKY_RATE = 0.2
 
 
@@ -40,7 +40,7 @@ class MSGProjection(tdl.core.Layer):
             projected_shape[-1],
             kernel_size=[projected_shape[0], projected_shape[1]],
             strides=(1, 1),
-            use_bias=USE_BIAS))
+            use_bias=USE_BIAS['generator']))
         model.add(tf_layers.LeakyReLU(LEAKY_RATE))
         return model
 
@@ -67,12 +67,12 @@ class MSGProjectionV2(MSGProjection):
             filters=projected_shape[-1],
             kernel_size=[projected_shape[0], projected_shape[1]],
             strides=(1, 1),
-            use_bias=USE_BIAS))
+            use_bias=USE_BIAS['generator']))
         model.add(tf_layers.LeakyReLU(LEAKY_RATE))
         model.add(tf_layers.Conv2D(
             filters=projected_shape[-1], kernel_size=(3, 3),
             strides=(1, 1), padding='same',
-            use_bias=USE_BIAS))
+            use_bias=USE_BIAS['generator']))
         model.add(tf_layers.LeakyReLU(LEAKY_RATE))
         return model
 
@@ -138,7 +138,7 @@ class MSG_GeneratorHidden(tdl.core.Layer):
         return value
 
     @tdl.core.SubmodelInit
-    def conv(self, kernels=None, padding='same', interpolation='bilinear'):
+    def conv(self, kernels=None, padding='same', interpolation='nearest'):
         if kernels is None:
             kernels = (3, 3)
         tdl.core.assert_initialized(self, 'conv', ['units', 'upsampling'])
@@ -148,17 +148,23 @@ class MSG_GeneratorHidden(tdl.core.Layer):
         #    interpolation=interpolation))
         model.add(Upsample2D(scale=self.upsampling,
                              interpolation=interpolation))
+        # ------------------------ old ------------------------
+        # model.add(tf_layers.Conv2DTranspose(
+        #         self.units, kernel_size=kernels,
+        #         strides=self.upsampling, padding=padding,
+        #         use_bias=USE_BIAS['generator']))
+        # ------------------------ old ------------------------
         model.add(tf_layers.Conv2D(
                 self.units, kernel_size=kernels,
                 strides=(1, 1), padding=padding,
-                use_bias=USE_BIAS))
-        # model.add(tf.keras.layers.BatchNormalization())
+                use_bias=USE_BIAS['generator']))
+        model.add(tf.keras.layers.BatchNormalization())
         model.add(tf_layers.LeakyReLU(LEAKY_RATE))
         model.add(tf_layers.Conv2D(
                 self.units, kernel_size=kernels,
                 strides=(1, 1), padding=padding,
-                use_bias=USE_BIAS))
-        # model.add(tf.keras.layers.BatchNormalization())
+                use_bias=USE_BIAS['generator']))
+        model.add(tf.keras.layers.BatchNormalization())
         return model
 
     # @tdl.core.SubmodelInit
@@ -168,7 +174,7 @@ class MSG_GeneratorHidden(tdl.core.Layer):
         return tf_layers.Conv2DTranspose(
                 self.units, kernel_size=kernels,
                 strides=self.upsampling, padding=padding,
-                use_bias=USE_BIAS)
+                use_bias=USE_BIAS['generator'])
 
     @tdl.core.Submodel
     def activation(self, value):
@@ -328,7 +334,7 @@ class MSG_GeneratorModel(tdl.stacked.StackedLayers):
             tdl.core.assert_initialized(self, 'projections', ['hidden_shapes'])
             for k_i, shape in zip(kargs, self.hidden_shapes):
                 k_i['input_shape'] = shape
-        if not USE_BIAS:
+        if not USE_BIAS['generator']:
             for k_i, shape in zip(kargs, self.hidden_shapes):
                 k_i['bias'] = None
 
@@ -371,7 +377,7 @@ class MSG_DiscriminatorModel(tdl.stacked.StackedLayers):
             return value
         tdl.core.assert_initialized(self, 'projections',
                                     ['layers', 'input_shape'])
-        kwargs = (dict() if USE_BIAS is True
+        kwargs = (dict() if USE_BIAS['discriminator'] is True
                   else {'bias': None})
         projections = list()
         for layer in self.layers[:-1]:
@@ -428,6 +434,17 @@ class MSG_GeneratorTrainer(GeneratorTrainer):
             return None
         return tdl.core.SimpleNamespace(scale=scale, fn=regularizer_fn)
 
+    @tdl.core.SubmodelInit
+    def pyramid_loss(self, scale=None):
+        def loss_fn():
+            mirror = self.model.pyramid(self.xsim)
+            value = tf.add_n([tf.nn.l2_loss(sim_i - mirror_i)
+                              for sim_i, mirror_i
+                              in zip(self.sim_pyramid, mirror)])
+            return value
+        return (None if scale is None
+                else tdl.core.SimpleNamespace(fn=loss_fn, scale=scale))
+
     @tdl.core.OutputValue
     def loss(self, _):
         tdl.core.assert_initialized(
@@ -449,6 +466,8 @@ class MSG_GeneratorTrainer(GeneratorTrainer):
                 [self.regularizer.fn(layer.kernel)
                  for layer in layers]
             )
+        if self.pyramid_loss is not None:
+            loss += self.pyramid_loss.scale * self.pyramid_loss.fn()
         return loss
 
 
@@ -458,14 +477,14 @@ class MSG_DiscriminatorHidden(tdl.stacked.StackedLayers):
         value = [tf_layers.Conv2D(
                     self.units, self.kernels, strides=(1, 1),
                     padding=self.padding,
-                    use_bias=USE_BIAS),
-                 # tf.keras.layers.BatchNormalization(),
+                    use_bias=USE_BIAS['discriminator']),
+                 tf.keras.layers.BatchNormalization(),
                  tf_layers.LeakyReLU(LEAKY_RATE),
                  tf_layers.Conv2D(
                     self.units, self.kernels, strides=(1, 1),
                     padding=self.padding,
-                    use_bias=USE_BIAS),
-                 # tf.keras.layers.BatchNormalization(),
+                    use_bias=USE_BIAS['discriminator']),
+                 tf.keras.layers.BatchNormalization(),
                  tf_layers.LeakyReLU(LEAKY_RATE),
                  tf.keras.layers.AveragePooling2D(pool_size=self.strides)
                  ]
@@ -497,10 +516,10 @@ class Conv2DLayer(tdl.convnet.Conv2DLayer):
 class MSG_DiscriminatorOutput(tdl.stacked.StackedLayers):
     @tdl.core.Submodel
     def layers(self, _):
-        kwargs = (dict() if USE_BIAS is True
+        kwargs = (dict() if USE_BIAS['discriminator'] is True
                   else {'bias': None})
         value = [
-            # tf.keras.layers.BatchNormalization(),
+            tf.keras.layers.BatchNormalization(),
             Conv2DLayer(kernel_size=(3, 3),
                         **kwargs),
             tf_layers.LeakyReLU(LEAKY_RATE),
@@ -620,5 +639,14 @@ class MSG_GAN(BaseGAN):
             ['generator', 'discriminator', 'noise_rate', 'pyramid'])
         return self.DiscriminatorTrainer(
             model=self, batch_size=batch_size, xreal=xreal,
+            optimizer={'learning_rate': learning_rate},
+            **kwargs)
+
+    def generator_trainer(self, batch_size, learning_rate=0.0002, **kwargs):
+        tdl.core.assert_initialized(
+            self, 'generator_trainer',
+            ['generator', 'discriminator', 'pyramid'])
+        return self.GeneratorTrainer(
+            model=self, batch_size=batch_size,
             optimizer={'learning_rate': learning_rate},
             **kwargs)
