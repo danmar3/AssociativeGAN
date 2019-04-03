@@ -12,10 +12,15 @@ class DcganTest(unittest.TestCase):
         model = acgan.model.DCGAN(
             embedding_size=256,
             generator={'init_shape': (4, 4, 1024),
-                       'units': [516, 256, 128, 3],
+                       'units': [516, 256, 128],
+                       'outputs': 3,
                        'kernels': 5,
                        'strides': 2,
-                       'padding': ['same', 'same', 'same', 'same']},
+                       'padding': ['same', 'same', 'same'],
+                       'output_kargs': {
+                           'upsampling': 2,
+                           'conv': {'kernels': 5, 'padding': 'same'}}
+                       },
             discriminator={'units': [128, 256, 512, 1024],
                            'kernels': 5,
                            'strides': 2,
@@ -37,7 +42,7 @@ class DcganTest(unittest.TestCase):
             tdl.core.variables_initializer(gen.variables).run()
             tdl.core.variables_initializer(dis.variables).run()
             self.assertAlmostEqual(dis.loss.eval(), 0.693, places=2)
-            assert len(tdl.core.get_variables(model.generator)) == 17
+            assert len(tdl.core.get_variables(model.generator)) == 18
             assert len(tdl.core.get_variables(model.discriminator)) == 26
             assert (set(tdl.core.get_variables(model.generator)) &
                     set(tdl.core.get_variables(model.discriminator))) == set()

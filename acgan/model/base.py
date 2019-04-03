@@ -280,9 +280,10 @@ class BaseGAN(tdl.core.TdlModel):
             [None, self.embedding_size])[1:]
 
     @tdl.core.SubmodelInit
-    def generator(self, init_shape, units, kernels=5, strides=2,
+    def generator(self, init_shape, units, outputs, output_kargs=None,
+                  kernels=5, strides=2,
                   padding='same'):
-        n_layers = len(units)
+        n_layers = len(units) + 1
         kernels = self._to_list(kernels, n_layers)
         strides = self._to_list(strides, n_layers)
         padding = (padding if isinstance(padding, (list, tuple))
@@ -290,13 +291,13 @@ class BaseGAN(tdl.core.TdlModel):
         model = self.GeneratorBaseModel(
             input_shape=[None, self.embedding_size])
         model.add(self.InputProjection(projected_shape=init_shape))
-        for i in range(len(units)-1):
+        for i in range(len(units)):
             model.add(self.GeneratorHidden(
                 units=units[i], upsampling=strides[i],
                 conv={'kernels': kernels[i], 'padding': padding[i]}))
-        model.add(self.GeneratorOutput(
-                units=units[-1], upsampling=strides[-1],
-                conv={'kernels': kernels[-1], 'padding': padding[-1]}))
+        if output_kargs is None:
+            output_kargs = dict()
+        model.add(self.GeneratorOutput(units=outputs, **output_kargs))
         return model
 
     @tdl.core.SubmodelInit

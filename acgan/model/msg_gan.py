@@ -13,6 +13,11 @@ LEAKY_RATE = 0.2
 GeneratorFeatureNorm = VectorNormalizer  # tf.keras.layers.BatchNormalization()
 
 
+def OutputActivation():
+    # return tf_layers.Activation(tf.keras.activations.tanh)
+    return None
+
+
 def regularizer_fn(weights):
     loss = tf.reduce_mean(tf.abs(weights))
     size = functools.reduce(
@@ -256,12 +261,26 @@ class MSG_GeneratorHidden(tdl.core.Layer):
 
 
 @tdl.core.create_init_docstring
-class MSG_GeneratorOutput(MSG_GeneratorHidden):
+class MSG_GeneratorOutput(Conv1x1Proj):
     @tdl.core.Submodel
     def activation(self, value):
         if value is None:
-            value = tf_layers.Activation(tf.keras.activations.tanh)
+            value = OutputActivation()
         return value
+
+    @tdl.core.ParameterInit
+    def bias(self, initializer=None, trainable=True, **kargs):
+        if not USE_BIAS:
+            return None
+        tdl.core.assert_initialized(self, 'bias', ['units'])
+        if initializer is None:
+            initializer = tf.keras.initializers.zeros()
+        return self.add_weight(
+            name='bias',
+            initializer=initializer,
+            shape=[self.units],
+            trainable=trainable,
+            **kargs)
 
 
 @tdl.core.create_init_docstring
@@ -381,7 +400,7 @@ class MSG_GeneratorModel(tdl.stacked.StackedLayers):
         shapes = list()
         for proj, hidden_shape in zip(self.projections, self.hidden_shapes):
             shapes.append(proj.compute_output_shape(hidden_shape))
-        shapes.append(self.output_shape)
+        # shapes.append(self.output_shape)
         return shapes
 
     @tdl.core.Submodel
@@ -394,17 +413,22 @@ class MSG_GeneratorModel(tdl.stacked.StackedLayers):
             tdl.core.assert_initialized(self, 'projections', ['hidden_shapes'])
             for k_i, shape in zip(kargs, self.hidden_shapes):
                 k_i['input_shape'] = shape
+            # set the input_shape of last layer
+            self.layers[-1].input_shape = self.hidden_shapes[-1]
+
         if not USE_BIAS['generator']:
             for k_i, shape in zip(kargs, self.hidden_shapes):
                 k_i['bias'] = None
 
         output_channels = self.layers[-1].units
         projections = [
-            tdl.convnet.Conv1x1Proj(
+            Conv1x1Proj(
                 units=output_channels,
-                activation=tf.keras.activations.tanh,
+                activation=OutputActivation(),
                 **kargs[i])
-            for i in range(len(self.layers)-1)]
+            for i in range(len(self.layers)-2)]
+        # output layer is a projection
+        projections.append(self.layers[-1])
         return projections
 
     def pyramid(self, inputs):
@@ -431,18 +455,16 @@ class MSG_DiscriminatorModel(tdl.stacked.StackedLayers):
             hidden_shapes.append(_input_shape)
         return hidden_shapes
 
-    @tdl.core.Submodel
-    def projections(self, value):
-        if value is not None:
-            return value
+    @tdl.core.SubmodelInit
+    def projections(self, init_units):
         tdl.core.assert_initialized(self, 'projections',
                                     ['layers', 'input_shape'])
         kwargs = (dict() if USE_BIAS['discriminator'] is True
                   else {'bias': None})
         projections = list()
-        for layer in self.layers[:-1]:
+        for layer in [init_units] + self.layers[:-1]:
             projections.append(
-                tdl.convnet.Conv1x1Proj(
+                Conv1x1Proj(
                     units=layer.units,
                     activation=tf_layers.LeakyReLU(LEAKY_RATE),
                     **kwargs
@@ -467,9 +489,10 @@ class MSG_DiscriminatorModel(tdl.stacked.StackedLayers):
             # TODO(daniel): implement depth?
             pass
         if self._size_matches(inputs.shape, self.input_shape):
-            return self._eval_chain(self.layers, inputs)
+            chain = [self.projections[0]] + self.layers
+            return self._eval_chain(chain, inputs)
         for idx, (shape, proj) in enumerate(
-                zip(self.hidden_shapes, self.projections)):
+                zip(self.hidden_shapes, self.projections[1:])):
             if self._size_matches(inputs.shape, shape):
                 chain = [proj] + self.layers[idx+1:]
                 return self._eval_chain(chain, inputs)
@@ -645,10 +668,12 @@ class MSG_GAN(BaseGAN):
         tdl.core.assert_initialized(self, 'discriminator', ['generator'])
         tdl.core.assert_initialized(
             self.generator, 'discriminator', ['projections'])
-
+        projections = self.generator.projections
         return MSG_DiscriminatorModel(
-            projections=[proj.get_transpose(trainable=False)
-                         for proj in self.generator.projections[::-1]])
+            projections=[proj.get_transpose(
+                            trainable=False,
+                            activation=tf_layers.LeakyReLU(LEAKY_RATE))
+                         for proj in projections[::-1]])
     DiscriminatorHidden = MSG_DiscriminatorHidden
     DiscriminatorTrainer = MSG_DiscriminatorTrainer
 
