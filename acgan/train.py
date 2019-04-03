@@ -5,16 +5,18 @@ MAX_UPDATE_STEPS = 100
 
 
 def run_training(dis, gen, n_steps=1000, n_logging=100, session=None):
-    def print_losses(progress_bar):
-        info = 'step {} | dis {:.4f} | gen {:.4f} '.format(
-            dis.train_step.eval(), dis.loss.eval(), gen.loss.eval())
+    def print_losses(progress_bar, session):
+        dis_step, dis_loss, gen_step, gen_loss = \
+            session.run([dis.train_step, dis.loss, gen.train_step, gen.loss])
+        info = 'step(d/g) {}/{} | dis {:.4f} | gen {:.4f} '.format(
+            dis_step, gen_step, dis_loss, gen_loss)
         progress_bar.set_description(info)
 
-    def update_log(steps, progres_bar):
+    def update_log(steps, progres_bar, session):
         progress_bar.update(1)
         done = steps > 2*n_steps
         if steps % n_logging == 0:
-            print_losses(progress_bar)
+            print_losses(progress_bar, session)
         return done, steps+1
 
     session = (session if session is not None
@@ -34,7 +36,7 @@ def run_training(dis, gen, n_steps=1000, n_logging=100, session=None):
         #              else 1)  # only one during first iterations
         for j in range(dis_steps):
             _, dis_loss, gen_loss = session.run([dis.step, dis.loss, gen.loss])
-            done, steps = update_log(steps, progress_bar)
+            done, steps = update_log(steps, progress_bar, session)
             if (dis_loss < gen_loss) or done:
                 break
         # optimize generator
@@ -42,7 +44,7 @@ def run_training(dis, gen, n_steps=1000, n_logging=100, session=None):
         gen_steps = min(gen_steps, MAX_UPDATE_STEPS)
         for j in range(gen_steps):
             _, dis_loss, gen_loss = session.run([gen.step, dis.loss, gen.loss])
-            done, steps = update_log(steps, progress_bar)
+            done, steps = update_log(steps, progress_bar, session)
             if (gen_loss < dis_loss) or done:
                 break
     progress_bar.close()
