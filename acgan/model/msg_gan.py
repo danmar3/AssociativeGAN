@@ -86,6 +86,45 @@ class Conv1x1Proj(tdl.convnet.Conv1x1Proj):
         return kernel * tf.sqrt(2.0/fan_in.value)
 
 
+class Conv2DTranspose(tdl.convnet.Conv2DTranspose):
+    @tdl.core.ParameterInit
+    def kernel(self, initializer=None, trainable=True, **kargs):
+        tdl.core.assert_initialized(
+            self, 'kernel', ['kernel_size', 'input_shape'])
+        if initializer is None:
+            initializer = tf.keras.initializers.glorot_uniform()
+        kernel = self.add_weight(
+            name='kernel',
+            initializer=initializer,
+            shape=[self.kernel_size[0], self.kernel_size[1],
+                   self.filters, self.input_shape[-1].value],
+            trainable=trainable,
+            **kargs)
+        # fan_in, fan_out = tdl.core.initializers.compute_fans(
+        #     tf.TensorShape([kernel.shape[0], kernel.shape[1],
+        #                     kernel.shape[3], kernel.shape[2]]))
+        fan_in = self.input_shape[-1]
+        return kernel * tf.sqrt(2.0/fan_in.value)
+
+
+@tdl.core.create_init_docstring
+class AffineLayer(tdl.dense.AffineLayer):
+    @tdl.core.ParameterInit
+    def kernel(self, initializer=None, trainable=True, **kargs):
+        tdl.core.assert_initialized(
+            self, 'kernel', ['units', 'input_shape'])
+        if initializer is None:
+            initializer = tf.keras.initializers.glorot_uniform()
+        kernel = self.add_weight(
+            name='kernel',
+            initializer=initializer,
+            shape=[self.input_shape[-1].value, self.units],
+            trainable=trainable,
+            **kargs)
+        fan_in, fan_out = tdl.core.initializers.compute_fans(kernel.shape)
+        return kernel * tf.sqrt(2.0/fan_in.value)
+
+
 @tdl.core.create_init_docstring
 class MSGProjection(tdl.core.Layer):
     @tdl.core.InputArgument
@@ -98,8 +137,8 @@ class MSGProjection(tdl.core.Layer):
         tdl.core.assert_initialized(self, 'projection', ['projected_shape'])
         model = tdl.stacked.StackedLayers()
         projected_shape = self.projected_shape.as_list()
-        model.add(tf_layers.Conv2DTranspose(
-            projected_shape[-1],
+        model.add(Conv2DTranspose(
+            filters=projected_shape[-1],
             kernel_size=[projected_shape[0], projected_shape[1]],
             strides=(1, 1),
             use_bias=USE_BIAS['generator']))
@@ -125,11 +164,13 @@ class MSGProjectionV2(MSGProjection):
         tdl.core.assert_initialized(self, 'projection', ['projected_shape'])
         model = tdl.stacked.StackedLayers()
         projected_shape = self.projected_shape.as_list()
-        model.add(tf_layers.Conv2DTranspose(
+        model.add(Conv2DTranspose(
             filters=projected_shape[-1],
             kernel_size=[projected_shape[0], projected_shape[1]],
-            strides=(1, 1),
+            strides=[1, 1],
             use_bias=USE_BIAS['generator']))
+        # if GeneratorFeatureNorm is not None:
+        #    model.add(GeneratorFeatureNorm())
         model.add(tf_layers.LeakyReLU(LEAKY_RATE))
         model.add(Conv2DLayer(
             filters=projected_shape[-1],
@@ -137,6 +178,8 @@ class MSGProjectionV2(MSGProjection):
             strides=[1, 1], padding='same',
             use_bias=USE_BIAS['generator']))
         model.add(tf_layers.LeakyReLU(LEAKY_RATE))
+        if GeneratorFeatureNorm is not None:
+            model.add(GeneratorFeatureNorm())
         return model
 
 
@@ -206,46 +249,29 @@ class MSG_GeneratorHidden(tdl.core.Layer):
             kernels = (3, 3)
         tdl.core.assert_initialized(self, 'conv', ['units', 'upsampling'])
         model = tdl.stacked.StackedLayers()
-        # model.add(tf_layers.UpSampling2D(
-        #    size=tuple(self.upsampling),
-        #    interpolation=interpolation))
         model.add(Upsample2D(scale=self.upsampling,
                              interpolation=interpolation))
-        # ------------------------ old ------------------------
-        # model.add(tf_layers.Conv2DTranspose(
-        #         self.units, kernel_size=kernels,
-        #         strides=self.upsampling, padding=padding,
-        #         use_bias=USE_BIAS['generator']))
-        # ------------------------ old ------------------------
         model.add(Conv2DLayer(
                 filters=self.units, kernel_size=list(kernels),
                 strides=[1, 1], padding=padding,
                 use_bias=USE_BIAS['generator']))
-        if GeneratorFeatureNorm is not None:
-            model.add(GeneratorFeatureNorm())
         model.add(tf_layers.LeakyReLU(LEAKY_RATE))
+        if GeneratorFeatureNorm is not None:
+            model.add(GeneratorFeatureNorm())
         model.add(Conv2DLayer(
                 filters=self.units, kernel_size=list(kernels),
                 strides=[1, 1], padding=padding,
                 use_bias=USE_BIAS['generator']))
-        if GeneratorFeatureNorm is not None:
-            model.add(GeneratorFeatureNorm())
         return model
-
-    # @tdl.core.SubmodelInit
-    # TODO(daniel): remove when testing is done
-    def conv_old(self, kernels, padding):
-        tdl.core.assert_initialized(self, 'conv', ['units', 'upsampling'])
-        return tf_layers.Conv2DTranspose(
-                self.units, kernel_size=kernels,
-                strides=self.upsampling, padding=padding,
-                use_bias=USE_BIAS['generator'])
 
     @tdl.core.Submodel
     def activation(self, value):
+        model = tdl.stacked.StackedLayers()
         if value is None:
-            value = tf_layers.LeakyReLU(LEAKY_RATE)
-        return value
+            model.add(tf_layers.LeakyReLU(LEAKY_RATE))
+        if GeneratorFeatureNorm is not None:
+            model.add(GeneratorFeatureNorm())
+        return model
 
     def compute_output_shape(self, input_shape):
         chain = [self.conv]
@@ -416,15 +442,12 @@ class MSG_GeneratorModel(tdl.stacked.StackedLayers):
             # set the input_shape of last layer
             self.layers[-1].input_shape = self.hidden_shapes[-1]
 
-        if not USE_BIAS['generator']:
-            for k_i, shape in zip(kargs, self.hidden_shapes):
-                k_i['bias'] = None
-
         output_channels = self.layers[-1].units
         projections = [
             Conv1x1Proj(
                 units=output_channels,
                 activation=OutputActivation(),
+                use_bias=USE_BIAS['generator'],
                 **kargs[i])
             for i in range(len(self.layers)-2)]
         # output layer is a projection
@@ -439,7 +462,6 @@ class MSG_GeneratorModel(tdl.stacked.StackedLayers):
         for layer, projection in zip(self.layers[:-1], self.projections):
             hidden = layer(hidden)
             pyramid.append(projection(hidden))
-        pyramid.append(self.layers[-1](hidden))
         self._update_variables()
         return pyramid
 
@@ -457,17 +479,15 @@ class MSG_DiscriminatorModel(tdl.stacked.StackedLayers):
 
     @tdl.core.SubmodelInit
     def projections(self, init_units):
-        tdl.core.assert_initialized(self, 'projections',
-                                    ['layers', 'input_shape'])
-        kwargs = (dict() if USE_BIAS['discriminator'] is True
-                  else {'bias': None})
+        tdl.core.assert_initialized(
+            self, 'projections', ['layers', 'input_shape'])
         projections = list()
         for layer in [init_units] + self.layers[:-1]:
             projections.append(
                 Conv1x1Proj(
                     units=layer.units,
                     activation=tf_layers.LeakyReLU(LEAKY_RATE),
-                    **kwargs
+                    use_bias=USE_BIAS['discriminator']
                 ))
         return projections
 
@@ -590,18 +610,16 @@ class MSG_DiscriminatorHidden(tdl.stacked.StackedLayers):
 class MSG_DiscriminatorOutput(tdl.stacked.StackedLayers):
     @tdl.core.Submodel
     def layers(self, _):
-        kwargs = (dict() if USE_BIAS['discriminator'] is True
-                  else {'bias': None})
         value = [
             MinibatchStddev(),
-            Conv2DLayer(kernel_size=[3, 3],
-                        **kwargs),
+            Conv2DLayer(kernel_size=[3, 3], padding='same',
+                        use_bias=USE_BIAS['discriminator']),
             tf_layers.LeakyReLU(LEAKY_RATE),
-            Conv2DLayer(kernel_size=[4, 4],
-                        **kwargs),
+            Conv2DLayer(kernel_size=[4, 4], padding='same',
+                        use_bias=USE_BIAS['discriminator']),
             tf_layers.LeakyReLU(LEAKY_RATE),
             tf_layers.Flatten(),
-            tf_layers.Dense(1),
+            AffineLayer(units=1),
             tf_layers.Activation(tf.keras.activations.sigmoid)]
         return value
 
@@ -687,9 +705,10 @@ class MSG_GAN(BaseGAN):
         target_size = self.target_shape[0:2].as_list()
         _input_shape = tf.TensorShape([None, self.embedding_size])
         hidden_shapes = list()
-        for layer in self.generator.layers:
+        for layer, proj in zip(self.generator.layers[:-1],
+                               self.generator.projections):
             _input_shape = layer.compute_output_shape(_input_shape)
-            hidden_shapes.append(_input_shape)
+            hidden_shapes.append(proj.compute_output_shape(_input_shape))
         hidden_sizes = [shape.as_list()[1:3] for shape in hidden_shapes[::-1]]
         assert hidden_sizes[0] == target_size,\
             'generator and target sizes do not match'
@@ -706,7 +725,7 @@ class MSG_GAN(BaseGAN):
             scaling.append(scale)
             _input_size = target_size
 
-        return ImagePyramid(scales=scaling)
+        return ImagePyramid(scales=scaling, interpolation=interpolation)
 
     def discriminator_trainer(self, batch_size, xreal=None, input_shape=None,
                               learning_rate=0.0002, beta1=0.5,
