@@ -45,14 +45,6 @@ def load_celeb_a(batch_size, split=tfds.Split.TRAIN):
         batch = tf.image.resize_bilinear(
             batch, size=(64, 64), align_corners=False)
         batch = (batch-127.5)/127.5
-        # batch = tf.image.resize_bilinear(
-        #    batch, size=(218//3, 178//3), align_corners=False)
-        # batch = tf.image.crop_to_bounding_box(
-        #    batch, offset_height=0, offset_width=0,
-        #    target_height=65, target_width=65)
-        # batch = tf.image.crop_to_bounding_box(
-        #    batch, offset_height=0, offset_width=0,
-        #    target_height=216, target_width=176)
         return batch
     dataset, info = tfds.load(
         'celeb_a', with_info=True, split=split, data_dir=DATA_DIR)
@@ -66,9 +58,25 @@ def load_celeb_a(batch_size, split=tfds.Split.TRAIN):
 def load_celeb_a_128(batch_size, split=tfds.Split.TRAIN):
     def map_fn(batch):
         batch = tf.cast(batch['image'], tf.float32)
-        batch = tf.image.central_crop(batch, central_fraction=0.7)
+        # batch = tf.image.central_crop(batch, central_fraction=0.7)
         batch = tf.image.resize_bilinear(
             batch, size=(128, 128), align_corners=False)
+        batch = (batch-127.5)/127.5
+        return batch
+    dataset, info = tfds.load(
+        'celeb_a', with_info=True, split=split, data_dir=DATA_DIR)
+    dataset = dataset.shuffle(1000).repeat()\
+        .batch(batch_size)\
+        .map(map_fn)\
+        .prefetch(tf.data.experimental.AUTOTUNE)
+    return dataset
+
+
+def load_celeb_hd_512(batch_size, split=tfds.Split.TRAIN):
+    def map_fn(batch):
+        batch = tf.cast(batch['image'], tf.float32)
+        batch = tf.image.resize_bilinear(
+            batch, size=(512, 512), align_corners=False)
         batch = (batch-127.5)/127.5
         return batch
     dataset, info = tfds.load(

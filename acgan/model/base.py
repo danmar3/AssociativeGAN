@@ -97,8 +97,8 @@ class VectorNormalizer(tdl.core.Layer):
 
     def call(self, inputs):
         inputs = tf.convert_to_tensor(inputs)
-        moment2 = tf.reduce_mean(inputs**2, axis=-1) + self.tolerance
-        return inputs/tf.sqrt(moment2[..., tf.newaxis])
+        moment2 = tf.reduce_mean(tf.square(inputs), axis=-1) + self.tolerance
+        return inputs*tf.rsqrt(moment2[..., tf.newaxis])
 
 
 @tdl.core.PropertyShortcuts({'model': ['discriminator', 'generator',
@@ -114,8 +114,9 @@ class BaseTrainer(tdl.core.TdlModel):
         return value
 
     @tdl.core.SubmodelInit
-    def optimizer(self, learning_rate, beta1=0.5):
+    def optimizer(self, learning_rate, beta1=0.0):
         return tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+        # return tf.train.RMSPropOptimizer(learning_rate=learning_rate)
 
     @tdl.core.LazzyProperty
     def train_step(self):
@@ -317,13 +318,14 @@ class BaseGAN(tdl.core.TdlModel):
         model.add(self.DiscriminatorOutput())
         return model
 
-    def generator_trainer(self, batch_size, learning_rate=0.0002, beta1=0.5,
+    def generator_trainer(self, batch_size, optimizer=None,
                           **kwargs):
         tdl.core.assert_initialized(
             self, 'generator_trainer', ['generator', 'discriminator'])
+        if optimizer is None:
+            optimizer = {'learning_rate': 0.0002, 'beta1': 0.0}
         return self.GeneratorTrainer(
-            model=self, batch_size=batch_size,
-            optimizer={'learning_rate': learning_rate, 'beta1': beta1},
+            model=self, batch_size=batch_size, optimizer=optimizer,
             **kwargs)
 
     @tdl.core.MethodInit
@@ -336,14 +338,16 @@ class BaseGAN(tdl.core.TdlModel):
                 else tf.exp(-local.rate * tf.cast(step, tf.float32)))
 
     def discriminator_trainer(self, batch_size, xreal=None, input_shape=None,
-                              learning_rate=0.0002, beta1=0.5,
+                              optimizer=None,
                               **kwargs):
         tdl.core.assert_initialized(
             self, 'discriminator_trainer',
             ['generator', 'discriminator', 'noise_rate'])
+        if optimizer is None:
+            optimizer = {'learning_rate': 0.0002, 'beta1': 0.0}
         return self.DiscriminatorTrainer(
             model=self, batch_size=batch_size, xreal=xreal,
-            optimizer={'learning_rate': learning_rate, 'beta1': beta1},
+            optimizer=optimizer,
             **kwargs)
 
     def __init__(self, embedding_size, name=None, **kargs):
