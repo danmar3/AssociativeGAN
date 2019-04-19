@@ -325,7 +325,7 @@ class BaseGAN(tdl.core.TdlModel):
         if optimizer is None:
             optimizer = {'learning_rate': 0.0002, 'beta1': 0.0}
         return self.GeneratorTrainer(
-            model=self, batch_size=batch_size, optimizer=optimizer,
+            model=self, batch_size=2*batch_size, optimizer=optimizer,
             **kwargs)
 
     @tdl.core.MethodInit
