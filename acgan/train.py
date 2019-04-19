@@ -1,7 +1,7 @@
 import tqdm
 import tensorflow as tf
 
-MAX_UPDATE_STEPS = 100
+MAX_UPDATE_STEPS = 10
 
 
 def run_training(dis, gen, n_steps=1000, n_logging=100, session=None):
