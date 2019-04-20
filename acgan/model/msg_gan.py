@@ -138,6 +138,7 @@ class MSGProjection(tdl.core.Layer):
         return self.projection.compute_output_shape(input_shape)
 
     def call(self, inputs):
+        inputs = tf.convert_to_tensor(inputs)
         assert inputs.shape.ndims == 2, \
             'input to MSG projection should be batched vectors'
         inputs = tf.transpose(inputs[..., tf.newaxis, tf.newaxis],
@@ -443,6 +444,7 @@ class MSG_GeneratorModel(tdl.stacked.StackedLayers):
         return projections
 
     def pyramid(self, inputs):
+        inputs = tf.convert_to_tensor(inputs)
         if self.built is False:
             self.build(inputs.shape)
         pyramid = list()

@@ -1,10 +1,11 @@
 import tensorflow as tf
 import twodlearn as tdl
 import twodlearn.bayesnet
+import tensorflow_probability as tfp
 import tensorflow.keras.layers as tf_layers
 from .base import _add_noise
 from .msg_gan import (MSG_GAN, MSG_DiscriminatorTrainer, MSG_GeneratorTrainer,
-                      AffineLayer)
+                      AffineLayer, Conv2DLayer)
 
 
 class GeneratorTrainer(MSG_GeneratorTrainer):
@@ -20,7 +21,7 @@ class GeneratorTrainer(MSG_GeneratorTrainer):
         tdl.core.assert_initialized(self, 'embedding', ['xinput'])
         dist = self.model.encoder(self.xinput)
         return tdl.core.SimpleNamespace(
-            value=dist.sample(), dist=dist)
+            value=dist.sample(), distribution=dist)
 
     @tdl.core.OutputValue
     def step(self, _):
@@ -40,6 +41,38 @@ class GeneratorTrainer(MSG_GeneratorTrainer):
         var_list = list(set(tdl.core.get_trainable(self.generator)) |
                         set(tdl.core.get_trainable(self.model.encoder)))
         return (self.optimizer.variables() + [self.train_step] + var_list)
+
+    @tdl.core.SubmodelInit
+    def prior(self, scale=1.0):
+        return tfp.distributions.Normal(loc=0, scale=scale)
+
+    @tdl.core.OutputValue
+    def loss(self, _):
+        tdl.core.assert_initialized(
+            self, 'loss', ['batch_size', 'xsim', 'sim_pyramid', 'regularizer',
+                           'pyramid_loss', 'prior'])
+        pred = self.discriminator(self.sim_pyramid)
+        loss = tf.keras.losses.BinaryCrossentropy()(
+                tf.ones_like(pred), pred)
+        # regularizer
+        if self.regularizer is not None:
+            layers = tdl.core.find_instances(
+                self.generator,
+                (tf.keras.layers.Conv2D, tdl.convnet.Conv2DLayer,
+                 tdl.convnet.Conv1x1Proj))
+            loss += self.regularizer.scale*tf.add_n(
+                [self.regularizer.fn(layer.kernel)
+                 for layer in layers]
+            )
+        if self.pyramid_loss is not None:
+            loss += self.pyramid_loss.scale * self.pyramid_loss.fn()
+        # kl divergence
+        kl_loss = tf.reduce_sum(
+            tfp.distributions.kl_divergence(
+                self.embedding.distribution, self.prior),
+            axis=-1)
+        loss = loss + tf.reduce_mean(kl_loss)
+        return loss
 
 
 class DiscriminatorTrainer(MSG_DiscriminatorTrainer):
@@ -63,15 +96,18 @@ class DiscriminatorTrainer(MSG_DiscriminatorTrainer):
         tdl.core.assert_initialized(self, 'embedding', ['xinput'])
         dist = self.model.encoder(self.xinput)
         return tdl.core.SimpleNamespace(
-            value=dist.sample(), dist=dist)
+            value=dist.sample(), distribution=dist)
 
 
 @tdl.core.create_init_docstring
 class ACGAN(MSG_GAN):
     EncoderModel = tdl.stacked.StackedLayers
+    EncoderHidden = Conv2DLayer
+    GeneratorTrainer = GeneratorTrainer
+    DiscriminatorTrainer = DiscriminatorTrainer
 
     @tdl.core.SubmodelInit
-    def encoder(self, units, kernels, strides, padding):
+    def encoder(self, units, kernels, strides, padding='same'):
         n_layers = len(units)
         kernels = self._to_list(kernels, n_layers)
         strides = self._to_list(strides, n_layers)
@@ -81,8 +117,8 @@ class ACGAN(MSG_GAN):
         model = self.EncoderModel()
         for i in range(len(units)):
             model.add(self.EncoderHidden(
-                units=units[i], strides=strides[i],
-                kernels=kernels[i], padding=padding[i]))
+                filters=units[i], strides=strides[i],
+                kernel_size=kernels[i], padding=padding[i]))
 
         model.add(tf_layers.Flatten())
         model.add(AffineLayer(units=self.embedding_size))
