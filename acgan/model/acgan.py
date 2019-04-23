@@ -75,6 +75,50 @@ class GeneratorTrainer(MSG_GeneratorTrainer):
         return loss
 
 
+class CyclicGeneratorTrainer(GeneratorTrainer):
+    @tdl.core.Submodel
+    def cyclic_embedding(self, _):
+        tdl.core.assert_initialized(self, 'embedding', ['sim_pyramid'])
+        dist = self.model.encoder(self.sim_pyramid[-1])
+        return tdl.core.SimpleNamespace(
+            value=dist.sample(), distribution=dist)
+
+    @tdl.core.OutputValue
+    def loss(self, _):
+        tdl.core.assert_initialized(
+            self, 'loss', ['batch_size', 'xsim', 'sim_pyramid', 'regularizer',
+                           'pyramid_loss', 'prior', 'cyclic_embedding'])
+        pred = self.discriminator(self.sim_pyramid)
+        loss = tf.keras.losses.BinaryCrossentropy()(
+                tf.ones_like(pred), pred)
+        # regularizer
+        if self.regularizer is not None:
+            layers = tdl.core.find_instances(
+                self.generator,
+                (tf.keras.layers.Conv2D, tdl.convnet.Conv2DLayer,
+                 tdl.convnet.Conv1x1Proj))
+            loss += self.regularizer.scale*tf.add_n(
+                [self.regularizer.fn(layer.kernel)
+                 for layer in layers]
+            )
+        if self.pyramid_loss is not None:
+            loss += self.pyramid_loss.scale * self.pyramid_loss.fn()
+        # kl divergence
+        kl_loss = tf.reduce_sum(
+            tfp.distributions.kl_divergence(
+                self.embedding.distribution, self.prior),
+            axis=-1)
+        loss = loss + tf.reduce_mean(kl_loss)
+        # cyclic divergence
+        kl_cyclic = tf.reduce_sum(
+            tfp.distributions.kl_divergence(
+                self.cyclic_embedding.distribution,
+                self.embedding.distribution),
+            axis=-1)
+        loss = loss + tf.reduce_mean(kl_cyclic)
+        return loss
+
+
 class DiscriminatorTrainer(MSG_DiscriminatorTrainer):
     @tdl.core.InputArgument
     def xreal(self, value):
@@ -103,7 +147,7 @@ class DiscriminatorTrainer(MSG_DiscriminatorTrainer):
 class ACGAN(MSG_GAN):
     EncoderModel = tdl.stacked.StackedLayers
     EncoderHidden = Conv2DLayer
-    GeneratorTrainer = GeneratorTrainer
+    GeneratorTrainer = CyclicGeneratorTrainer
     DiscriminatorTrainer = DiscriminatorTrainer
 
     @tdl.core.SubmodelInit
