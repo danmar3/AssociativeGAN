@@ -46,6 +46,12 @@ class GeneratorTrainer(MSG_GeneratorTrainer):
     def prior(self, scale=1.0):
         return tfp.distributions.Normal(loc=0, scale=scale)
 
+    @tdl.core.InputArgument
+    def reg_factor(self, value):
+        if value is None:
+            value = 0.001
+        return value
+
     @tdl.core.OutputValue
     def loss(self, _):
         tdl.core.assert_initialized(
@@ -65,13 +71,14 @@ class GeneratorTrainer(MSG_GeneratorTrainer):
                  for layer in layers]
             )
         if self.pyramid_loss is not None:
-            loss += self.pyramid_loss.scale * self.pyramid_loss.fn()
+            loss += (self.reg_factor*self.pyramid_loss.scale
+                     * self.pyramid_loss.fn())
         # kl divergence
         kl_loss = tf.reduce_sum(
             tfp.distributions.kl_divergence(
                 self.embedding.distribution, self.prior),
             axis=-1)
-        loss = loss + tf.reduce_mean(kl_loss)
+        loss = loss + self.reg_factor*tf.reduce_mean(kl_loss)
         return loss
 
 
@@ -102,20 +109,83 @@ class CyclicGeneratorTrainer(GeneratorTrainer):
                  for layer in layers]
             )
         if self.pyramid_loss is not None:
-            loss += self.pyramid_loss.scale * self.pyramid_loss.fn()
+            loss += (self.reg_factor*self.pyramid_loss.scale
+                     * self.pyramid_loss.fn())
         # kl divergence
         kl_loss = tf.reduce_sum(
             tfp.distributions.kl_divergence(
                 self.embedding.distribution, self.prior),
             axis=-1)
-        loss = loss + tf.reduce_mean(kl_loss)
+        loss = loss + self.reg_factor*tf.reduce_mean(kl_loss)
         # cyclic divergence
         kl_cyclic = tf.reduce_sum(
             tfp.distributions.kl_divergence(
                 self.cyclic_embedding.distribution,
                 self.embedding.distribution),
             axis=-1)
-        loss = loss + tf.reduce_mean(kl_cyclic)
+        loss = loss + self.reg_factor*tf.reduce_mean(kl_cyclic)
+        return loss
+
+
+def reduce_var(x, axis=None, keepdims=False):
+    m = tf.reduce_mean(x, axis=axis, keep_dims=True)
+    devs_squared = tf.square(x - m)
+    return tf.reduce_mean(devs_squared, axis=axis, keep_dims=keepdims)
+
+
+def reduce_std(x, axis=None, keepdims=False):
+    return tf.sqrt(reduce_var(x, axis=axis, keepdims=keepdims))
+
+
+class CyclicGeneratorTrainerV2(CyclicGeneratorTrainer):
+    @tdl.core.Submodel
+    def embedding(self, _):
+        tdl.core.assert_initialized(self, 'embedding', ['xinput'])
+        dist = self.model.encoder(self.xinput)
+        return dist.mean()
+
+    @tdl.core.Submodel
+    def cyclic_embedding(self, _):
+        tdl.core.assert_initialized(self, 'embedding', ['sim_pyramid'])
+        dist = self.model.encoder(self.sim_pyramid[-1])
+        return dist.mean()
+
+    @tdl.core.OutputValue
+    def loss(self, _):
+        tdl.core.assert_initialized(
+            self, 'loss', ['batch_size', 'xsim', 'sim_pyramid', 'regularizer',
+                           'pyramid_loss', 'prior', 'cyclic_embedding'])
+        pred = self.discriminator(self.sim_pyramid)
+        loss = tf.keras.losses.BinaryCrossentropy()(
+                tf.ones_like(pred), pred)
+        # regularizer
+        if self.regularizer is not None:
+            layers = tdl.core.find_instances(
+                self.generator,
+                (tf.keras.layers.Conv2D, tdl.convnet.Conv2DLayer,
+                 tdl.convnet.Conv1x1Proj))
+            loss += self.regularizer.scale*tf.add_n(
+                [self.regularizer.fn(layer.kernel)
+                 for layer in layers]
+            )
+        if self.pyramid_loss is not None:
+            loss += (self.reg_factor*self.pyramid_loss.scale
+                     * self.pyramid_loss.fn())
+        # kl divergence
+        embedding = self.embedding
+        aggregated_dist = tfp.distributions.Normal(
+            loc=tf.reduce_mean(embedding, 0),
+            scale=reduce_std(embedding, 0))
+        kl_loss = tf.reduce_sum(
+            tfp.distributions.kl_divergence(
+                aggregated_dist, self.prior),
+            axis=-1)
+        loss = loss + self.reg_factor*tf.reduce_mean(kl_loss)
+        # cyclic divergence
+        kl_cyclic = tf.reduce_sum(
+            tf.square(self.cyclic_embedding - self.embedding),
+            axis=-1)
+        loss = loss + self.reg_factor*tf.reduce_mean(kl_cyclic)
         return loss
 
 
@@ -143,12 +213,20 @@ class DiscriminatorTrainer(MSG_DiscriminatorTrainer):
             value=dist.sample(), distribution=dist)
 
 
+class CyclicDiscriminatorTrainer(DiscriminatorTrainer):
+    @tdl.core.Submodel
+    def embedding(self, _):
+        tdl.core.assert_initialized(self, 'embedding', ['xinput'])
+        dist = self.model.encoder(self.xinput)
+        return dist.mean()
+
+
 @tdl.core.create_init_docstring
 class ACGAN(MSG_GAN):
     EncoderModel = tdl.stacked.StackedLayers
     EncoderHidden = Conv2DLayer
-    GeneratorTrainer = CyclicGeneratorTrainer
-    DiscriminatorTrainer = DiscriminatorTrainer
+    GeneratorTrainer = CyclicGeneratorTrainerV2
+    DiscriminatorTrainer = CyclicDiscriminatorTrainer
 
     @tdl.core.SubmodelInit
     def encoder(self, units, kernels, strides, padding='same'):
