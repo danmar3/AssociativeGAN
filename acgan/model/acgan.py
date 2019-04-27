@@ -5,7 +5,7 @@ import tensorflow_probability as tfp
 import tensorflow.keras.layers as tf_layers
 from .base import _add_noise
 from .msg_gan import (MSG_GAN, MSG_DiscriminatorTrainer, MSG_GeneratorTrainer,
-                      AffineLayer, Conv2DLayer)
+                      AffineLayer, Conv2DLayer, LEAKY_RATE)
 
 
 class GeneratorTrainer(MSG_GeneratorTrainer):
@@ -241,6 +241,7 @@ class ACGAN(MSG_GAN):
             model.add(self.EncoderHidden(
                 filters=units[i], strides=strides[i],
                 kernel_size=kernels[i], padding=padding[i]))
+            model.add(tf_layers.LeakyReLU(LEAKY_RATE))
 
         model.add(tf_layers.Flatten())
         model.add(AffineLayer(units=self.embedding_size))
