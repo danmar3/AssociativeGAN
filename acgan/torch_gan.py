@@ -236,11 +236,15 @@ class GANTrainer():
         return self.epoch_losses
 
     @staticmethod
-    def grid_display(data, figsize=(10, 10), pad_value=0, title='',
+    def grid_display(data, figsize=(10, 10),
+                     pad_value=0, title='',
+                     xlabel='', ylabel='',
                      nrow=8):
         fig, ax = plt.subplots(figsize=figsize)
         ax.axis("off")
         ax.set_title(title)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
         ax.imshow(np.transpose(vutils.make_grid(data,
                                                 padding=2,
                                                 nrow=nrow,
