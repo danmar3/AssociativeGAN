@@ -4,7 +4,8 @@ import tensorflow as tf
 MAX_UPDATE_STEPS = 10
 
 
-def run_training(dis, gen, n_steps=1000, n_logging=100, session=None):
+def run_training(dis, gen, n_steps=1000, n_logging=100, session=None,
+                 dis_steps=None):
     def print_losses(progress_bar, session):
         dis_step, dis_loss, gen_step, gen_loss = \
             session.run([dis.train_step, dis.loss, gen.train_step, gen.loss])
@@ -19,6 +20,8 @@ def run_training(dis, gen, n_steps=1000, n_logging=100, session=None):
             print_losses(progress_bar, session)
         return done, steps+1
 
+    dynamic_dis = dis_steps is None   # if dis_steps is none, use dynamic
+
     session = (session if session is not None
                else tf.get_default_session()
                if tf.get_default_session() is not None
@@ -30,8 +33,9 @@ def run_training(dis, gen, n_steps=1000, n_logging=100, session=None):
     # an each update of either network is considered an step
     while not done:
         # optimize discriminator
-        dis_steps = max(1, int(dis_loss//gen_loss))
-        dis_steps = min(dis_steps, MAX_UPDATE_STEPS)
+        if dynamic_dis:
+            dis_steps = max(1, int(dis_loss//gen_loss))
+            dis_steps = min(dis_steps, MAX_UPDATE_STEPS)
         # dis_steps = (dis_steps if dis.train_step.eval() > 500
         #              else 1)  # only one during first iterations
         for j in range(dis_steps):
