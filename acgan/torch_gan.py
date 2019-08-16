@@ -97,6 +97,7 @@ class CNNBlock(torch.nn.Module):
                     dilation=1,
                     groups=1,
                     bias=True, batchnorm=True,
+                 dropout=0.5,
                  activation=None
                  ):
         super(CNNBlock, self).__init__()
@@ -114,12 +115,19 @@ class CNNBlock(torch.nn.Module):
         #self.act = nn.ReLU(True)
         self.act = (nn.LeakyReLU(negative_slope=0.2)
                     if activation is None else activation)
+        self.drp = None
+        if dropout is not None:
+            self.drp = nn.Dropout2d(dropout)
 
     def forward(self, x):
         out = self.conv(x)
         if self.batchnorm:
             out = self.bn(out)
+
         out = self.act(out)
+
+        if self.drp is not None:
+            out = self.drp(out)
         return out
 
 @attr.attrs
