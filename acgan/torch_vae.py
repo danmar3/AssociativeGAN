@@ -159,7 +159,8 @@ class VAETrainer:
         #image_size = 64
         #depth = 3
         #BCE = F.binary_cross_entropy(recon_x, x.view(-1, (image_size ** 2) * depth), reduction='sum')
-        BCE = F.binary_cross_entropy(recon_x, x.view(-1, (x.shape[1] * x.shape[2] * x.shape[3])),
+        BCE = F.binary_cross_entropy(recon_x,
+                                     x.view(-1, (x.shape[1] * x.shape[2] * x.shape[3])),
                                      reduction='sum')
 
         # see Appendix B from VAE paper:
@@ -205,15 +206,6 @@ class VAETrainer:
 
                 epoch_pbar.update(1)
         return losses
-
-                #if batch_idx % log_interval == 0:
-                #    print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                #        epoch, batch_idx * len(data), len(self.data_gen.dataset),
-                #               100. * batch_idx / len(train_loader),
-                #               loss.item() / len(data)))
-
-            #print('====> Epoch: {} Average loss: {:.4f}'.format(
-            #    epoch, train_loss / len(train_loader.dataset)))
 
 
 if __name__ == """__main__""":
