@@ -63,7 +63,8 @@ class CNNTransposeBlock(torch.nn.Module):
                     output_padding=0,
                     groups=1,
                     bias=True,
-                    dilation=1):
+                    dilation=1,
+                 activation=None):
         super(CNNTransposeBlock, self).__init__()
 
         self.convt = nn.ConvTranspose2d(in_channels=in_channels,
@@ -77,7 +78,9 @@ class CNNTransposeBlock(torch.nn.Module):
                               dilation=dilation)
         self.bn = nn.BatchNorm2d(out_channels)
         #self.act = nn.ReLU(True)
-        self.act = nn.LeakyReLU(negative_slope=0.2)
+
+        self.act = (nn.LeakyReLU(negative_slope=0.2)
+                    if activation is None else activation)
 
     def forward(self, x):
         out = self.convt(x)
@@ -93,7 +96,10 @@ class CNNBlock(torch.nn.Module):
                     padding=0,
                     dilation=1,
                     groups=1,
-                    bias=True, batchnorm=True):
+                    bias=True, batchnorm=True,
+                 dropout=0.5,
+                 activation=None
+                 ):
         super(CNNBlock, self).__init__()
         self.conv = nn.Conv2d(in_channels=in_channels,
                               out_channels=out_channels,
@@ -107,13 +113,21 @@ class CNNBlock(torch.nn.Module):
         if self.batchnorm:
             self.bn = nn.BatchNorm2d(num_features=out_channels)
         #self.act = nn.ReLU(True)
-        self.act = nn.LeakyReLU(negative_slope=0.2)
+        self.act = (nn.LeakyReLU(negative_slope=0.2)
+                    if activation is None else activation)
+        self.drp = None
+        if dropout is not None:
+            self.drp = nn.Dropout2d(dropout)
 
     def forward(self, x):
         out = self.conv(x)
         if self.batchnorm:
             out = self.bn(out)
+
         out = self.act(out)
+
+        if self.drp is not None:
+            out = self.drp(out)
         return out
 
 @attr.attrs
@@ -230,14 +244,18 @@ class GANTrainer():
         return self.epoch_losses
 
     @staticmethod
-    def grid_display(data, figsize=(10,10), pad_value=0, title=''):
+    def grid_display(data, figsize=(10, 10),
+                     pad_value=0, title='',
+                     xlabel='', ylabel='',
+                     nrow=8):
         fig, ax = plt.subplots(figsize=figsize)
-
-        #fig = plt.figure(figsize=figsize)
         ax.axis("off")
         ax.set_title(title)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
         ax.imshow(np.transpose(vutils.make_grid(data,
                                                 padding=2,
+                                                nrow=nrow,
                                                 normalize=True,
                                                 pad_value=pad_value).detach().cpu(), (1, 2, 0)))
 

@@ -13,19 +13,30 @@ import attr
 from tqdm.auto import tqdm
 
 class VAE(nn.Module):
-    def __init__(self, input_size=784):
+    def __init__(self, input_size=784, hidden_size=400, z_size=10):
         super(VAE, self).__init__()
 
         self.input_size = input_size
-        self.fc1 = nn.Linear(input_size, 400)
-        self.fc21 = nn.Linear(400, 20)
-        self.fc22 = nn.Linear(400, 20)
-        self.fc3 = nn.Linear(20, 400)
-        self.fc4 = nn.Linear(400, input_size)
+
+        #### Encoding Params
+        self.encoder = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+        )
+        self.encoded_means = nn.Linear(hidden_size, z_size)
+        self.encoded_var = nn.Linear(hidden_size, z_size)
+
+        #### Decoding Params
+        self.decoder = nn.Sequential(
+            nn.Linear(z_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, input_size),
+            nn.Sigmoid()
+        )
 
     def encode(self, x):
-        h1 = F.relu(self.fc1(x))
-        return self.fc21(h1), self.fc22(h1)
+        h_enc = self.encoder(x)
+        return self.encoded_means(h_enc), self.encoded_var(h_enc)
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -33,11 +44,94 @@ class VAE(nn.Module):
         return mu + eps * std
 
     def decode(self, z):
-        h3 = F.relu(self.fc3(z))
-        return torch.sigmoid(self.fc4(h3))
+        return self.decoder(z)
 
     def forward(self, x):
         mu, logvar = self.encode(x.view(-1, self.input_size))
+        z = self.reparameterize(mu, logvar)
+        return self.decode(z), mu, logvar
+
+
+class Reshape(torch.nn.Module):
+    def __init__(self, shape):
+        super(Reshape, self).__init__()
+        self.shape = shape
+
+    def forward(self, x):
+        return x.view(self.shape)
+
+class CVAE(VAE):
+    def __init__(self, input_size, z_size=2, hidden_size=64):
+        super(VAE, self).__init__()
+
+        self.input_size = input_size
+
+        enc = torch_gan.make_model_from_block(torch_gan.CNNBlock,
+                                               z_dim=3,
+                                               n_channels=[hidden_size]*4,
+                                               kernel_sizes=[4, 4, 4, 4],
+                                               strides=[1, 2, 2],
+                                               paddings=[1, 1, 1]
+                                               )
+        enc.add_module(name='output_conv', module=torch.nn.Conv2d(hidden_size, 1, 4, stride=1))
+        enc.add_module(name='output_activ', module=torch.nn.Sigmoid())
+
+        t_rng_arr = torch.rand(1, *self.input_size)  # .reshape(batch_size, *img_shape[1:])
+        lin_in_size = np.product(enc(t_rng_arr).shape[1:])
+        enc.add_module(name='reshape', module=Reshape((-1, lin_in_size)))
+
+        ####
+        #enc.add_module(name='embed_lin', module=torch.nn.Linear(in_features=lin_in_size,
+        #                                                        out_features=z_size))
+        #enc.add_module(name='embed_act', module=torch.nn.ReLU())
+
+        self.encoder = enc
+
+        #####
+        ## Decoder
+        dec = torch_gan.make_model_from_block(torch_gan.CNNTransposeBlock,
+                                              z_dim=2,
+                                              n_channels=[hidden_size]*4,#, 3],
+                                              kernel_sizes=[4, 4, 4, 2],#, 2],
+                                              strides=[1, 1, 2, 2],
+                                              paddings=[0, 0, 0, 0])
+        dec.add_module(name='dec_output',
+                       module=torch_gan.CNNTransposeBlock(hidden_size, 3, 2, 2,
+                                                          activation=torch.nn.Sigmoid()))
+        self.decoder = dec
+
+
+        #### Encoding Params
+        #self.encoder = nn.Sequential(
+        #    nn.Linear(input_size, hidden_size),
+        #    nn.ReLU(),
+        #)
+        self.encoded_means = nn.Linear(lin_in_size, z_size)
+        self.encoded_var = nn.Linear(lin_in_size, z_size)
+
+        #### Decoding Params
+        #self.decoder = nn.Sequential(
+        #    nn.Linear(z_size, hidden_size),
+        #    nn.ReLU(),
+        #    nn.Linear(hidden_size, input_size),
+        #    nn.Sigmoid()
+        #)
+
+    def encode(self, x):
+        h_enc = self.encoder(x)
+        return self.encoded_means(h_enc), self.encoded_var(h_enc)
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def decode(self, z):
+        #t_rng_embed.reshape(64, 2, 1, 1)
+        return self.decoder(z.reshape(-1, 2, 1, 1))
+
+    def forward(self, x):
+        mu, logvar = self.encode(x.view(-1, *self.input_size))
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
@@ -58,13 +152,15 @@ class VAETrainer:
     def init_weights(self):
         pass
 
-    # Reconstruction + KL divergence losses summed over all elements and batch
+    # Reconstruction + KL divergence
+    # losses summed over all elements and batch
     @staticmethod
     def loss_function(recon_x, x, mu, logvar):
         #image_size = 64
         #depth = 3
         #BCE = F.binary_cross_entropy(recon_x, x.view(-1, (image_size ** 2) * depth), reduction='sum')
-        BCE = F.binary_cross_entropy(recon_x, x.view(-1, (x.shape[1] * x.shape[2] * x.shape[3])),
+        BCE = F.binary_cross_entropy(recon_x,
+                                     x.view(-1, (x.shape[1] * x.shape[2] * x.shape[3])),
                                      reduction='sum')
 
         # see Appendix B from VAE paper:
@@ -110,15 +206,6 @@ class VAETrainer:
 
                 epoch_pbar.update(1)
         return losses
-
-                #if batch_idx % log_interval == 0:
-                #    print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                #        epoch, batch_idx * len(data), len(self.data_gen.dataset),
-                #               100. * batch_idx / len(train_loader),
-                #               loss.item() / len(data)))
-
-            #print('====> Epoch: {} Average loss: {:.4f}'.format(
-            #    epoch, train_loss / len(train_loader.dataset)))
 
 
 if __name__ == """__main__""":
