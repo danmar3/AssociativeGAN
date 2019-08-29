@@ -459,7 +459,8 @@ class MSG_GeneratorModel(tdl.stacked.StackedLayers):
 class MSG_DiscriminatorModel(tdl.stacked.StackedLayers):
     @tdl.core.LazzyProperty
     def hidden_shapes(self):
-        tdl.core.assert_initialized(self, 'hidden_shapes', ['input_shape'])
+        tdl.core.assert_initialized(
+            self, 'hidden_shapes', ['input_shape', 'projections'])
         pyramid_shape = self.input_shape
         input_shapes = pyramid_shape[::-1]
         output_list = list()
