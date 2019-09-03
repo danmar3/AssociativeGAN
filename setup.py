@@ -12,6 +12,8 @@ DEPS = ['tensorflow-probability==0.6.0',
         'pandas', 'matplotlib', 'jupyter', 'scipy',
         'attrs']
 
+DEPS_DEV = ['Sphinx', 'sphinx_rtd_theme']
+
 
 def get_dependencies():
     tf_names = ['tensorflow-gpu', 'tensorflow', 'tf-nightly']
@@ -36,6 +38,9 @@ setup(name='acgan',
           exclude=["*test*", "tests"]),
       package_data={'': ['*.so']},
       install_requires=get_dependencies(),
+      extras_require={
+          'dev': DEPS_DEV
+      },
       author='Daniel L. Marino',
       author_email='marinodl@vcu.edu',
       licence='GPL',
