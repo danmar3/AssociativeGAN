@@ -23,8 +23,8 @@ def run_training(dis, gen, n_steps=1000, n_logging=100, session=None,
     dynamic_dis = dis_steps is None   # if dis_steps is none, use dynamic
 
     session = (session if session is not None
-               else tf.get_default_session()
-               if tf.get_default_session() is not None
+               else tf.compat.v1.get_default_session()
+               if tf.compat.v1.get_default_session() is not None
                else tf.InteractiveSession())
     dis_loss, gen_loss = session.run([dis.loss, gen.loss])
     progress_bar = tqdm.tqdm(range(2*n_steps))
