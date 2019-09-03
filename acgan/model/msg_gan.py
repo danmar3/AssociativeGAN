@@ -625,11 +625,13 @@ class MSG_DiscriminatorOutput(tdl.stacked.StackedLayers):
 class MSG_DiscriminatorTrainer(DiscriminatorTrainer):
     @tdl.core.OutputValue
     def real_pyramid(self, _):
+        '''Real image pyramid.'''
         tdl.core.assert_initialized(self, 'real_pyramid', ['xreal'])
         return self.model.pyramid(self.xreal)
 
     @tdl.core.OutputValue
     def sim_pyramid(self, _):
+        '''Generated image pyramid.'''
         tdl.core.assert_initialized(self, 'sim_pyramid', ['embedding'])
         return self.generator.pyramid(self.embedding)
 

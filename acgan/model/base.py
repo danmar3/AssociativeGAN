@@ -111,6 +111,7 @@ class BaseTrainer(tdl.core.TdlModel):
 
     @tdl.core.InputArgument
     def batch_size(self, value):
+        '''Number of images extracted/generated for training.'''
         return value
 
     @tdl.core.SubmodelInit
@@ -120,12 +121,14 @@ class BaseTrainer(tdl.core.TdlModel):
 
     @tdl.core.LazzyProperty
     def train_step(self):
+        '''Number of training steps executed.'''
         return tf.Variable(0, dtype=tf.int32, name='train_step')
 
 
 class GeneratorTrainer(BaseTrainer):
     @tdl.core.OutputValue
     def embedding(self, _):
+        '''Random samples in embedded space used to generate images.'''
         return tf.random.normal([self.batch_size, self.embedding_size])
 
     @tdl.core.OutputValue
@@ -170,6 +173,7 @@ def _add_noise(samples, noise_rate):
 class DiscriminatorTrainer(BaseTrainer):
     @tdl.core.InputArgument
     def xreal(self, value):
+        '''real images obtained from the dataset'''
         tdl.core.assert_initialized(self, 'xreal', ['train_step'])
         noise_rate = self.model.noise_rate(self.train_step)
         if noise_rate is not None:
@@ -182,6 +186,7 @@ class DiscriminatorTrainer(BaseTrainer):
 
     @tdl.core.OutputValue
     def xsim(self, _):
+        '''generated images from the genrator model'''
         tdl.core.assert_initialized(self, 'xsim', ['embedding'])
         xsim = self.generator(self.embedding, training=True)
         noise_rate = self.model.noise_rate(self.train_step)
@@ -240,7 +245,7 @@ class DiscriminatorHidden(tdl.stacked.StackedLayers):
         super(DiscriminatorHidden, self).__init__(**kargs)
 
 
-class DiscriminatorOutput(tdl.stacked.StackedLayers):
+class DiscriminatorOutputBase(tdl.stacked.StackedLayers):
     @tdl.core.Submodel
     def layers(self, _):
         value = [tf_layers.Flatten(),
@@ -259,7 +264,7 @@ class BaseGAN(tdl.core.TdlModel):
 
     DiscriminatorBaseModel = tdl.stacked.StackedLayers
     DiscriminatorHidden = DiscriminatorHidden
-    DiscriminatorOutput = DiscriminatorOutput
+    DiscriminatorOutput = DiscriminatorOutputBase
     DiscriminatorTrainer = DiscriminatorTrainer
 
     @staticmethod

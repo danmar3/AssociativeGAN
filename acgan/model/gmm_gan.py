@@ -1,12 +1,10 @@
 import tensorflow as tf
 import twodlearn as tdl
 import twodlearn.bayesnet
-import tensorflow_probability as tfp
 import tensorflow.keras.layers as tf_layers
-from .base import _add_noise
 from .gmm import GMM
 from .msg_gan import (MSG_GAN, MSG_DiscriminatorTrainer, MSG_GeneratorTrainer,
-                      AffineLayer, Conv2DLayer, LEAKY_RATE)
+                      AffineLayer, LEAKY_RATE)
 
 
 def _loss_embedding():
@@ -88,6 +86,7 @@ class GmmGeneratorTrainer(MSG_GeneratorTrainer):
 @tdl.core.create_init_docstring
 class GmmGan(MSG_GAN):
     EmbeddingModel = GMM
+    EncoderModel = tdl.stacked.StackedModel
 
     @tdl.core.SubmodelInit
     def embedding(self, n_dims, n_components, init_loc=1e-5, init_scale=1.0):
@@ -99,6 +98,7 @@ class GmmGan(MSG_GAN):
 
     @tdl.core.SubmodelInit
     def encoder(self, units, kernels, strides, dropout=None, padding='same'):
+        '''CNN for recovering the encodding of a given image'''
         n_layers = len(units)
         kernels = self._to_list(kernels, n_layers)
         strides = self._to_list(strides, n_layers)
