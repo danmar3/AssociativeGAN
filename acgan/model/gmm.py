@@ -45,9 +45,11 @@ class GMM(tdl.core.layers.Layer):
                 for comp in self.components])
         return bimix_gauss
 
+    @tdl.core.layers.build_wrapper
     def sample(self, sample_shape):
         return self.dist.sample(sample_shape)
 
+    @tdl.core.layers.build_wrapper
     def log_prob(self, inputs):
         return self.dist.log_prob(inputs)
 

@@ -281,6 +281,7 @@ class BaseGAN(tdl.core.TdlModel):
 
     @tdl.core.LazzyProperty
     def target_shape(self):
+        '''Shape of the generated images.'''
         tdl.core.assert_initialized(self, 'target_shape', ['generator'])
         return self.generator.compute_output_shape(
             [None, self.embedding_size])[1:]

@@ -4,19 +4,16 @@ import twodlearn.bayesnet
 import tensorflow.keras.layers as tf_layers
 from .gmm import GMM
 from .msg_gan import (MSG_GAN, MSG_DiscriminatorTrainer, MSG_GeneratorTrainer,
-                      AffineLayer, LEAKY_RATE)
-
-
-def _loss_embedding():
-    pass
+                      AffineLayer, Conv2DLayer, LEAKY_RATE)
+from .base import BaseTrainer
 
 
 class GmmDiscriminatorTrainer(MSG_DiscriminatorTrainer):
     @tdl.core.Submodel
     def embedding(self, _):
         tdl.core.assert_initialized(self, 'embedding', ['batch_size'])
-        dist = self.model.embedding(self.batch_size)
-        return dist
+        sample = self.model.embedding(self.batch_size)
+        return sample
 
     @tdl.core.OutputValue
     def loss(self, _):
@@ -43,12 +40,83 @@ class GmmDiscriminatorTrainer(MSG_DiscriminatorTrainer):
         return loss
 
 
+class GmmEncoderTrainer(BaseTrainer):
+    @tdl.core.SubmodelInit
+    def optimizer(self, learning_rate, beta1=0.0):
+        return {
+            'encoder': tf.train.AdamOptimizer(learning_rate, beta1=beta1),
+            'embedding': tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+            }
+
+    @tdl.core.Submodel
+    def embedding(self, _):
+        tdl.core.assert_initialized(self, 'embedding', ['batch_size'])
+        sample = self.model.embedding(self.batch_size)
+        return sample
+
+    @tdl.core.OutputValue
+    def sim_pyramid(self, _):
+        tdl.core.assert_initialized(self, 'sim_pyramid', ['embedding'])
+        return self.generator.pyramid(self.embedding)
+
+    @tdl.core.OutputValue
+    def xsim(self, _):
+        tdl.core.assert_initialized(self, 'xsim', ['sim_pyramid'])
+        return self.sim_pyramid[-1]
+
+    @tdl.core.Submodel
+    def encoded(self, _):
+        tdl.core.assert_initialized(self, 'embedding', ['xsim'])
+        return self.model.encoder(self.xsim)
+
+    def _loss_encoder(self, z, zpred):
+        return tf.reduce_mean(
+            tdl.core.array.reduce_sum_rightmost(
+                (z - zpred)**2))
+
+    def _loss_embedding(self, zpred):
+        return -self.model.embedding.log_prob(zpred)
+
+    @tdl.core.OutputValue
+    def loss(self, _):
+        tdl.core.assert_initialized(self, 'loss', ['embedding', 'encoded'])
+        return {'encoder': self._loss_encoder(self.embedding, self.encoded),
+                'embedding': self._loss_embedding(self.encoded)}
+
+    @tdl.core.OutputValue
+    def step(self, _):
+        tdl.core.assert_initialized(
+            self, 'step', ['loss', 'optimizer', 'train_step'])
+        with tf.control_dependencies([self.train_step.assign_add(1)]):
+            step = {
+                'encoder':
+                self.optimizer['encoder'].minimize(
+                    self.loss['encoder'],
+                    var_list=tdl.core.get_trainable(self.model.encoder)),
+                'embedding':
+                self.optimizer['embedding'].minimize(
+                    self.loss['embedding'],
+                    var_list=tdl.core.get_trainable(self.model.embedding)),
+                }
+        return step
+
+    @property
+    def variables(self):
+        tdl.core.assert_initialized(
+            self, 'variables', ['optimizer', 'train_step'])
+        return (self.optimizer['encoder'].variables() +
+                [self.train_step] +
+                tdl.core.get_variables(self.model.encoder) +
+                self.optimizer['embedding'].variables() +
+                tdl.core.get_variables(self.model.embedding))
+
+
 class GmmGeneratorTrainer(MSG_GeneratorTrainer):
     @tdl.core.Submodel
     def embedding(self, _):
         tdl.core.assert_initialized(self, 'embedding', ['batch_size'])
-        dist = self.model.embedding(self.batch_size)
-        return dist.mean()
+        sample = self.model.embedding.sample(self.batch_size)
+        return sample
 
     @tdl.core.OutputValue
     def loss(self, _):
@@ -85,13 +153,23 @@ class GmmGeneratorTrainer(MSG_GeneratorTrainer):
 
 @tdl.core.create_init_docstring
 class GmmGan(MSG_GAN):
+    '''TODO (daniel):
+    train encoder with discriminator
+    train embedding with generator
+    '''
     EmbeddingModel = GMM
     EncoderModel = tdl.stacked.StackedModel
+    EncoderTrainer = GmmEncoderTrainer
+    GeneratorTrainer = GmmGeneratorTrainer
+
+    DiscriminatorTrainer = GmmDiscriminatorTrainer
 
     @tdl.core.SubmodelInit
-    def embedding(self, n_dims, n_components, init_loc=1e-5, init_scale=1.0):
+    def embedding(self, n_components, init_loc=1e-5, init_scale=1.0):
+        tdl.core.assert_initialized(self, 'embedding', ['embedding_size'])
         model = self.EmbeddingModel(
-            n_dims=n_dims, n_components=n_components,
+            n_dims=self.embedding_size,
+            n_components=n_components,
             components={'init_loc': init_loc,
                         'init_scale': init_scale})
         return model
@@ -107,7 +185,7 @@ class GmmGan(MSG_GAN):
 
         model = self.EncoderModel()
         for i in range(len(units)):
-            model.add(self.EncoderHidden(
+            model.add(Conv2DLayer(
                 filters=units[i], strides=strides[i],
                 kernel_size=kernels[i], padding=padding[i]))
             model.add(tf_layers.LeakyReLU(LEAKY_RATE))
@@ -122,7 +200,8 @@ class GmmGan(MSG_GAN):
                               optimizer=None, **kwargs):
         tdl.core.assert_initialized(
             self, 'discriminator_trainer',
-            ['generator', 'discriminator', 'noise_rate', 'pyramid', 'encoder'])
+            ['generator', 'discriminator', 'noise_rate', 'pyramid',
+             'embedding', 'encoder'])
         if optimizer is None:
             optimizer = {'learning_rate': 0.0002, 'beta1': 0.0}
         return self.DiscriminatorTrainer(
@@ -133,10 +212,22 @@ class GmmGan(MSG_GAN):
     def generator_trainer(self, batch_size, optimizer=None, **kwargs):
         tdl.core.assert_initialized(
             self, 'generator_trainer',
-            ['generator', 'discriminator', 'pyramid', 'encoder'])
+            ['generator', 'discriminator', 'pyramid', 'embedding', 'encoder'])
         if optimizer is None:
             optimizer = {'learning_rate': 0.0002, 'beta1': 0.0}
         return self.GeneratorTrainer(
             model=self, batch_size=2*batch_size,
+            optimizer=optimizer,
+            **kwargs)
+
+    def encoder_trainer(self, batch_size, optimizer=None, **kwargs):
+        tdl.core.assert_initialized(
+            self, 'discriminator_trainer',
+            ['generator', 'discriminator', 'noise_rate', 'pyramid',
+             'embedding', 'encoder'])
+        if optimizer is None:
+            optimizer = {'learning_rate': 0.0002, 'beta1': 0.0}
+        return self.EncoderTrainer(
+            model=self, batch_size=batch_size,
             optimizer=optimizer,
             **kwargs)
