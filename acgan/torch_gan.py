@@ -14,7 +14,9 @@ def auto_extend(*args, max_len=None):
     return list(zip(*args))
 
 def make_model_from_block(cls, z_dim, n_channels, kernel_sizes,
-                          strides, paddings, dilations=[1]):
+                          strides, paddings, dilations=[1], batchnorm=True,
+                          dropout=0.5):
+
     _iter = auto_extend(n_channels, kernel_sizes, strides,
                         paddings, #output_paddings,
                         dilations)
@@ -23,7 +25,8 @@ def make_model_from_block(cls, z_dim, n_channels, kernel_sizes,
         blk = cls(z_dim if not i else n_channels[i - 1],
                   _n_chan, kernel_size=_kernel_size, stride=_stride,
                   padding=_padding, #output_padding=_op,
-                  groups=1, bias=True, dilation=_dilation)
+                  groups=1, bias=True, dilation=_dilation,
+                  batchnorm=batchnorm, dropout=dropout)
         model.add_module(name="Block_%d" % i, module=blk)
     return model
 
@@ -64,27 +67,36 @@ class CNNTransposeBlock(torch.nn.Module):
                     groups=1,
                     bias=True,
                     dilation=1,
+                 batchnorm=True,
+                 dropout=0.5,
                  activation=None):
         super(CNNTransposeBlock, self).__init__()
 
         self.convt = nn.ConvTranspose2d(in_channels=in_channels,
-                              out_channels=out_channels,
-                              kernel_size=kernel_size,
-                              stride=stride,
-                              padding=padding,
-                              output_padding=output_padding,
-                              groups=groups,
-                              bias=bias,
-                              dilation=dilation)
+                                          out_channels=out_channels,
+                                          kernel_size=kernel_size,
+                                          stride=stride,
+                                          padding=padding,
+                                          output_padding=output_padding,
+                                          groups=groups,
+                                          bias=bias,
+                                          dilation=dilation)
+        self.dropout = nn.Dropout2d(dropout) if dropout is not None else None
         self.bn = nn.BatchNorm2d(out_channels)
         #self.act = nn.ReLU(True)
+        self.batchnorm = batchnorm
 
         self.act = (nn.LeakyReLU(negative_slope=0.2)
                     if activation is None else activation)
 
     def forward(self, x):
         out = self.convt(x)
-        out = self.bn(out)
+        if self.dropout is not None:
+            out = self.dropout(out)
+
+        if self.batchnorm:
+            out = self.bn(out)
+
         out = self.act(out)
         return out
 
@@ -115,19 +127,19 @@ class CNNBlock(torch.nn.Module):
         #self.act = nn.ReLU(True)
         self.act = (nn.LeakyReLU(negative_slope=0.2)
                     if activation is None else activation)
-        self.drp = None
-        if dropout is not None:
-            self.drp = nn.Dropout2d(dropout)
+        #self.drp = None
+        self.dropout = nn.Dropout2d(dropout) if dropout is not None else None
 
     def forward(self, x):
         out = self.conv(x)
+        if self.dropout is not None:
+            out = self.dropout(out)
+
         if self.batchnorm:
             out = self.bn(out)
 
         out = self.act(out)
 
-        if self.drp is not None:
-            out = self.drp(out)
         return out
 
 @attr.attrs
@@ -158,6 +170,9 @@ class GANTrainer():
         # Establish convention for real and fake labels during training
         real_label = 1
         fake_label = 0
+
+        self.disc_model = self.disc_model.to(self.device)
+        self.gen_model = self.gen_model.to(self.device)
 
         # Optimizers
         if self.disc_optim is None:
