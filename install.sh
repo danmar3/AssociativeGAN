@@ -33,7 +33,7 @@ git clone https://github.com/danmar3/twodlearn.git twodlearn
 cd twodlearn
 git checkout v0.6
 pip install -e .
-cd ..
+cd ../../
 deactivate
 
 # 3. install project
