@@ -19,7 +19,7 @@ def main():
     parser.add_argument('--gpu', default=0, help='gpu to use')
 
     FLAGS = parser.parse_args()
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(parser.gpu)
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu)
 
     experiment = ExperimentGMM()
     if FLAGS.restore is not None:
