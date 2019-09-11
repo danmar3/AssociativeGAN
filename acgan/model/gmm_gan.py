@@ -153,10 +153,7 @@ class GmmGeneratorTrainer(MSG_GeneratorTrainer):
 
 @tdl.core.create_init_docstring
 class GmmGan(MSG_GAN):
-    '''TODO (daniel):
-    train encoder with discriminator
-    train embedding with generator
-    '''
+    '''GAN with a GMM embedding.'''
     EmbeddingModel = GMM
     EncoderModel = tdl.stacked.StackedModel
     EncoderTrainer = GmmEncoderTrainer

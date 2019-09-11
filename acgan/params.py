@@ -64,6 +64,39 @@ PARAMS = {
                 'gen/steps': 1,
                 'dis/steps': 5
                 }
+            },
+        'gmmgan': {
+            'model': {
+                'embedding_size': 64,
+                'embedding': {'n_components': 100},
+                'encoder': {
+                    'units': [32, 64, 64, 64],
+                    'kernels': 3,
+                    'strides': 2},
+                'generator': {
+                    'init_shape': (4, 4, 64),
+                    'units': [256, 128, 64, 32, 16],
+                    'outputs': 3,
+                    'kernels': 3,
+                    'strides': 2},
+                'discriminator': {
+                    'units': [16, 32, 64, 128, 256],
+                    'kernels': 3,
+                    'strides': 2,
+                    'dropout': None}
+                },
+            'generator_trainer': {
+                'batch_size': 16,
+                'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+                },
+            'discriminator_trainer': {
+                'batch_size': 16,
+                'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+                },
+            'encoder_trainer': {
+                'batch_size': 16,
+                'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+                }
             }
         }
     }

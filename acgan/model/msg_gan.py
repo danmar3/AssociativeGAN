@@ -674,11 +674,7 @@ class MSG_GAN(BaseGAN):
     GeneratorOutput = MSG_GeneratorOutput
     GeneratorTrainer = MSG_GeneratorTrainer
 
-    def DiscriminatorBaseModel(self, **kargs):
-        tdl.core.assert_initialized(self, 'discriminator', ['generator'])
-        tdl.core.assert_initialized(
-            self.generator, 'discriminator', ['projections'])
-        return MSG_DiscriminatorModel()
+    DiscriminatorBaseModel = MSG_DiscriminatorModel
     DiscriminatorHidden = MSG_DiscriminatorHidden
     DiscriminatorTrainer = MSG_DiscriminatorTrainer
 
