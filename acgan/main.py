@@ -26,7 +26,7 @@ class ExperimentGMM(object):
         # init output_dir
         now = datetime.datetime.now()
         self.output_dir = 'tmp/{}/session_{}{:02d}{:02d}:{:02d}{:02d}'.format(
-            type(self.model).__name__,
+            self.name,
             now.year, now.month, now.day, now.hour, now.minute
             )
         if not os.path.exists(self.output_dir):
