@@ -6,9 +6,7 @@ from setuptools import setup, find_packages
 # for development installation: pip install -e .
 # for distribution: python setup.py sdist #bdist_wheel
 #                   pip install dist/project_name.tar.gz
-DEPS = ['tensorflow-probability==0.6.0',
-        'tensorflow-gpu==1.13.1',
-        'tensorflow-datasets',
+DEPS = ['tensorflow-probability', 'tensorflow-datasets',
         'pandas', 'matplotlib', 'jupyter', 'scipy',
         'attrs']
 
@@ -23,13 +21,7 @@ def get_dependencies():
     if tf_installed:
         return DEPS
     else:
-        tf_in_deps = any([any(tfname == dep.split('==')[0]
-                              for tfname in tf_names)
-                          for dep in DEPS])
-        if tf_in_deps:
-            return DEPS
-        else:
-            return DEPS + ['tensorflow']
+        return DEPS + ['tensorflow']
 
 
 setup(name='acgan',
