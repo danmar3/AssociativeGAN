@@ -25,7 +25,9 @@ def main():
     if FLAGS.restore is not None:
         experiment.restore(FLAGS.restore)
     for step in tqdm.tqdm(range(int(FLAGS.n_steps))):
-        experiment.run(n_steps=int(FLAGS.n_steps_save))
+        while not experiment.run(n_steps=int(FLAGS.n_steps_save)):
+            print('---------------------- RESTORING ------------------------')
+            experiment.restore()
         experiment.save()
         experiment.visualize()
 

@@ -52,18 +52,43 @@ class ExperimentGMM(object):
         # saver
         self.saver = tf.train.Saver(tdl.core.get_variables(self.model))
 
-    def restore(self, filename):
-        self.saver.restore(self.session, filename)
+    def restore(self, pathname=None):
+        def get_latest(pathname, filter=None):
+            if filter is None:
+                filter = lambda x: True
+            folders = [folder for folder in os.listdir(pathname)
+                       if os.path.isdir(folder) and filter(folder)]
+            if folders:
+                return os.path.join(pathname, sorted(folders)[-1])
+            files = [fi.split('.')[0] for fi in os.listdir(pathname)
+                     if filter(fi)]
+            if files:
+                return os.path.join(pathname, sorted(files)[-1] + '.ckpt')
+            else:
+                raise ValueError('could not find any saved checkpoint in {}'
+                                 ''.format(pathname))
+
+        if pathname is None:
+            pathname = self.output_dir
+        if os.path.isdir(pathname):
+            if any('session' in folder for folder in os.listdir(pathname)):
+                pathname = get_latest(pathname, lambda x: 'session' in x)
+            if 'checkpoints' in os.listdir(pathname):
+                pathname = os.path.join(pathname, 'checkpoints')
+            pathname = get_latest(pathname, lambda x: 'vars_' in x)
+        self.saver.restore(self.session, pathname)
 
     def run(self, n_steps=100):
         for trial in tqdm.tqdm(range(n_steps)):
-            run_training(
-                dis=self.trainer.dis, gen=self.trainer.gen,
-                n_steps=200, n_logging=10)
+            if not run_training(
+                    dis=self.trainer.dis, gen=self.trainer.gen,
+                    n_steps=200, n_logging=10):
+                return False
             for i in tqdm.tqdm(range(200)):
                 self.session.run(self.trainer.enc.step['encoder'])
             for i in tqdm.tqdm(range(20)):
                 self.session.run(self.trainer.enc.step['embedding'])
+        return True
 
     def visualize(self, filename=None):
         if filename is None:

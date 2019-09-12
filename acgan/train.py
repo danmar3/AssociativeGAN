@@ -51,4 +51,10 @@ def run_training(dis, gen, n_steps=1000, n_logging=100, session=None,
             done, steps = update_log(steps, progress_bar, session)
             if (gen_loss < dis_loss) or done:
                 break
+        # break if training not stable anymore
+        if dis_loss < 1e-2 or gen_loss < 1e-2:
+            print('------------------- TRAINING FAILED ----------------------')
+            progress_bar.close()
+            return False
     progress_bar.close()
+    return True
