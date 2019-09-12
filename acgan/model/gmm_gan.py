@@ -70,12 +70,17 @@ class GmmEncoderTrainer(BaseTrainer):
         return self.model.encoder(self.xsim)
 
     def _loss_encoder(self, z, zpred):
+        '''loss of the encoder network.'''
         return tf.reduce_mean(
             tdl.core.array.reduce_sum_rightmost(
-                (z - zpred)**2))
+                -zpred.log_prob(z)))
+        # return tf.reduce_mean(
+        #     tdl.core.array.reduce_sum_rightmost(
+        #         (z - zpred)**2))
 
     def _loss_embedding(self, zpred):
-        return -self.model.embedding.log_prob(zpred)
+        '''loss of the random embedding.'''
+        return -self.model.embedding.log_prob(zpred.sample())
 
     @tdl.core.OutputValue
     def loss(self, _):
@@ -191,6 +196,10 @@ class GmmGan(MSG_GAN):
 
         model.add(tf_layers.Flatten())
         model.add(AffineLayer(units=self.embedding_size))
+        model.add(tdl.bayesnet.NormalModel(
+            loc=lambda x: x,
+            batch_shape=self.embedding_size
+        ))
         return model
 
     def discriminator_trainer(self, batch_size, xreal=None, input_shape=None,
