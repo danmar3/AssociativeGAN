@@ -276,17 +276,22 @@ class GANTrainer():
 
         return fig
 
+    def generate(self, noise=None, batch_size=1):
+        if noise is None:
+            noise = torch.randn(batch_size, self.in_channel_size,
+                                1, 1, device=self.device)
+            fake_batch = self.gen_model(noise).to('cpu')
+        else:
+            fake_batch = self.gen_model(noise).to('cpu')
+
+        return fake_batch
+
     def display_batch(self, batch_size=16, noise=None, batch_data=None, figsize=(10, 10), title='Generated Data',
                       pad_value=0):
-        if batch_data is None and noise is None:
-            noise = torch.randn(batch_size, self.in_channel_size, 1, 1, device=self.device)
-            fake_batch = self.gen_model(noise).to('cpu')
-        elif batch_data is not None:
+        if batch_data is not None:
             fake_batch = batch_data
         else:
             # Generate fake image batch with G
-            fake_batch = self.gen_model(noise).to('cpu')
-
-        #real_batch = next(iter(self.data_gen))
+            fake_batch = self.generate(noise=noise, batch_size=batch_size)
 
         return self.grid_display(fake_batch, figsize=figsize, title=title, pad_value=pad_value)

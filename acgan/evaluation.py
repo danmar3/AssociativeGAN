@@ -49,17 +49,15 @@ def torch_dense_vae(dataloader, z_size=100, hidden_size=1024):
 
 
 ########
-def make_celeba_dataloader(dataroot):
+def make_celeba_dataloader(dataroot, batch_size=64, batches_per_epoch=2000,
+                           image_resize=96, image_crop_size=64, workers=4):
     import torchvision.transforms as transforms
     import torchvision.datasets as dset
-    image_size = 64
-    batch_size = 64
-    workers = 4
 
     dataset = dset.ImageFolder(root=dataroot,
                                transform=transforms.Compose([
-                                   transforms.Resize(image_size),
-                                   transforms.CenterCrop(image_size),
+                                   transforms.Resize(image_resize),
+                                   transforms.CenterCrop(image_crop_size),
                                    transforms.ToTensor(),
                                    #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                ]))
@@ -67,11 +65,11 @@ def make_celeba_dataloader(dataroot):
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                                              sampler=torch.utils.data.RandomSampler(dataset,
                                                                                     replacement=True,
-                                                                                    num_samples=2000*batch_size),
+                                                                                    num_samples=batches_per_epoch*batch_size),
                                              shuffle=False, num_workers=workers)
 
     # Decide which device we want to run on
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    #device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     return dataloader
 
@@ -116,7 +114,7 @@ class Evaluation:
 
             self.trainer_results[tname] = res
             self.trainers[tname] = trainer
-            self.post_train_hook_results[tname] = [h(trainer) for h in post_train_hooks]
+            self.post_train_hook_results[tname] = [h(self) for h in post_train_hooks]
 
             # Cool off
             if self.cooloff_time is not None:
@@ -135,3 +133,12 @@ class Evaluation:
         nrds_map = nrds.NRDS.score(**l_df.to_dict(orient='list'))
         return nrds_map
 
+    def compute_generated_msssim(self, n_samples=100, win_size=3):
+        from pytorch_msssim import ssim, ms_ssim, SSIM, MS_SSIM
+
+        msssim_scores = {m_name: ms_ssim(m_trainer.generate(batch_size=n_samples),
+                                        m_trainer.generate(batch_size=n_samples),
+                                        win_size=win_size)
+                            for m_name, m_trainer in self.trainers.items()}
+
+        return msssim_scores
