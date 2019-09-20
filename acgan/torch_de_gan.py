@@ -10,6 +10,11 @@ import attr
 from tqdm.auto import tqdm
 
 class EGAN(torch.nn.Module):
+    """
+    Encoding + GAN
+
+    The noise input to the Gen is taken as the output of an encoder
+    """
     def __init__(self, z_size=100, dropout=0.5, batchnorm=True):
         super(EGAN, self).__init__()
 
@@ -74,6 +79,7 @@ class EGAN_Trainer:
         batch_callbacks = dict() if batch_callbacks is None else batch_callbacks
 
         real_label, fake_label = 1, 0
+        real_labels, fake_labels = None, None
 
         #self.n_samples = self.n_samples if self.n_samples is not None else
         if self.n_samples is None:
@@ -90,9 +96,9 @@ class EGAN_Trainer:
         z_size = self.egan_model.z_size
 
         ####
-        self.gen_optim = torch.optim.Adam(self.gen_model.parameters())
-        self.disc_optim = torch.optim.Adam(self.disc_model.parameters())
-        self.enc_optim = torch.optim.Adam(self.enc_model.parameters())
+        self.gen_optim = torch.optim.Adam(self.gen_model.parameters(), lr=self.learning_rate)
+        self.disc_optim = torch.optim.Adam(self.disc_model.parameters(), lr=self.learning_rate)
+        self.enc_optim = torch.optim.Adam(self.enc_model.parameters(), lr=0.0001)
 
         ####
         self.gen_losses = list()
@@ -100,13 +106,15 @@ class EGAN_Trainer:
         self.enc_losses = list()
 
         ###
-        epoch_cb_history = [{k: cb(self, 0) for k, cb in epoch_callbacks.items()}]
-        batch_cb_history = [{k: cb(self, 0) for k, cb in batch_callbacks.items()}]
+        self.epoch_cb_history = [{k: cb(self, 0) for k, cb in epoch_callbacks.items()}]
+        self.batch_cb_history = [{k: cb(self, 0) for k, cb in batch_callbacks.items()}]
 
         with tqdm(total=n_epochs, desc='Training epoch') as epoch_pbar:
             for epoch in range(self.epochs_trained, self.epochs_trained + n_epochs):
                 with tqdm(total=self.n_samples, desc='-loss-') as batch_pbar:
                     for i, data in enumerate(self.data_gen):
+                        i += 1  # Epochs are not zero indexed
+
                         self.disc_model.zero_grad()
                         self.gen_model.zero_grad()
                         self.enc_model.zero_grad()
@@ -120,8 +128,9 @@ class EGAN_Trainer:
                         ###
 
                         # Labels for the real batch in disc
-                        real_labels = torch.full((batch_size, 1, 1, 1), real_label,
-                                                 device=self.device)
+                        if real_labels is None:
+                            real_labels = torch.full((batch_size,), real_label,
+                                                     device=self.device)
 
                         # Discrims binary classification of real inputs
                         disc_real_output = self.disc_model(real_x).view(-1)
@@ -136,8 +145,10 @@ class EGAN_Trainer:
                                                                        z_size,
                                                                        1, 1))
                         # Disc binary classification of fake inputs
-                        fake_labels = torch.full((batch_size, 1, 1, 1),
-                                                 fake_label, device=self.device)
+                        if fake_labels is None:
+                            fake_labels = torch.full((batch_size,),
+                                                     fake_label, device=self.device)
+
                         disc_fake_output = self.disc_model(gen_real_z_output)
                         d_fake_err = self.criterion(disc_fake_output, fake_labels)
                         d_fake_err.backward(retain_graph=True)
@@ -162,10 +173,16 @@ class EGAN_Trainer:
                         ###
 
                         # Encourage small values of encoding
-                        z_l2 = torch.norm(real_z)
-                        z_l2.backward()
-
-                        self.enc_optim.step()
+                        if False:
+                            z_l2 = torch.norm(real_z)
+                            kl_loss = torch.nn.functional.kl_div(real_z.abs().log(),
+                                                                   torch.rand_like(real_z, requires_grad=True),
+                                                                   reduction='batchmean')
+                            enc_loss = z_l2 + kl_loss
+                            enc_loss.backward()
+                            self.enc_optim.step()
+                        else:
+                            z_l2 = torch.tensor(0)
 
 
                         ####
@@ -179,15 +196,18 @@ class EGAN_Trainer:
                         ####
                         # Description and progress updates
                         #desc_str = "Gen-L: %.3f || Disc-L: %.3f" % ()
-                        desc_str = "Gen-L: %.3f || Disc-L: %.3f || Enc-L: %.3f" % (np.mean(self.gen_losses[-10:]),
-                                                                                   np.mean(self.disc_losses[-10:]),
-                                                                                   np.mean(self.enc_losses[-10:]))
+                        desc_str = "Gen-L: %.3f || Disc-L: %.3f || Enc-L: %.3f" % (np.mean(self.gen_losses[-50:]),
+                                                                                   np.mean(self.disc_losses[-50:]),
+                                                                                   np.mean(self.enc_losses[-50:]))
                         batch_pbar.set_description(desc_str)
                         batch_pbar.update(1)
 
+                        if not i % batch_cb_delta:
+                            self.batch_cb_history.append({k: cb(self, epoch)
+                                                          for k, cb in batch_callbacks.items()})
 
                 self.epochs_trained += 1
-                epoch_cb_history.append({k: cb(self, epoch) for k, cb in epoch_callbacks.items()})
+                self.epoch_cb_history.append({k: cb(self, epoch) for k, cb in epoch_callbacks.items()})
                 epoch_pbar.update(1)
 
 
