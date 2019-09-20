@@ -57,7 +57,8 @@ class ExperimentGMM(object):
             if filter is None:
                 filter = lambda x: True
             folders = [folder for folder in os.listdir(pathname)
-                       if os.path.isdir(folder) and filter(folder)]
+                       if os.path.isdir(os.path.join(pathname, folder))
+                       and filter(folder)]
             if folders:
                 return os.path.join(pathname, sorted(folders)[-1])
             files = [fi.split('.')[0] for fi in os.listdir(pathname)
@@ -76,6 +77,8 @@ class ExperimentGMM(object):
             if 'checkpoints' in os.listdir(pathname):
                 pathname = os.path.join(pathname, 'checkpoints')
             pathname = get_latest(pathname, lambda x: 'vars_' in x)
+        print('-------------- Restoring: {} ------------------'
+              ''.format(pathname))
         self.saver.restore(self.session, pathname)
 
     def run(self, n_steps=100):

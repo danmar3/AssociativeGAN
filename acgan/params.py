@@ -70,17 +70,17 @@ PARAMS = {
                 'embedding_size': 64,
                 'embedding': {'n_components': 100},
                 'encoder': {
-                    'units': [16, 32, 64, 64],
+                    'units': [32, 64, 128, 64],
                     'kernels': 3,
                     'strides': 2},
                 'generator': {
-                    'init_shape': (4, 4, 64),
-                    'units': [512, 256, 128, 64, 32],
+                    'init_shape': (4, 4, 512),
+                    'units': [512, 512, 512, 256, 128],
                     'outputs': 3,
                     'kernels': 3,
                     'strides': 2},
                 'discriminator': {
-                    'units': [32, 64, 128, 256, 512],
+                    'units': [128, 256, 512, 512, 512],
                     'kernels': 3,
                     'strides': 2,
                     'dropout': None}
