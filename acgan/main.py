@@ -7,19 +7,29 @@ import tensorflow as tf
 import twodlearn as tdl
 import matplotlib.pyplot as plt
 from . import data
-from . import params
+from . import params as acgan_params
 from .train import run_training
 from .model.gmm_gan import GmmGan
 
 
 class ExperimentGMM(object):
-    def _load_params(self, dataset_name):
-        self.params = params.PARAMS[dataset_name][self.name]
+    @classmethod
+    def restore_session(cls, session_path, dataset_name):
+        with open(os.path.join(session_path, 'params.json'), "r") as file_h:
+            params = json.load(file_h)
+        experiment = cls(dataset_name=dataset_name, params=params)
+        experiment.restore(session_path)
+        return experiment
+
+    def _init_params(self, params, dataset_name):
+        if params is None:
+            params = acgan_params.PARAMS[dataset_name][self.name]
+        self.params = params
         filename = os.path.join(self.output_dir, 'params.json')
         with open(filename, 'w') as file_h:
             json.dump(self.params, file_h)
 
-    def __init__(self, dataset_name='celeb_a'):
+    def __init__(self, dataset_name='celeb_a', params=None):
         self.name = 'gmmgan'
         self.session = tf.InteractiveSession()
 
@@ -33,7 +43,7 @@ class ExperimentGMM(object):
             os.makedirs(self.output_dir)
 
         # init model
-        self._load_params(dataset_name)
+        self._init_params(params, dataset_name)
         dataset = data.load_celeb_a_128_cropped(
             self.params['generator_trainer']['batch_size'])
         self.model = GmmGan(**self.params['model'])
@@ -53,6 +63,14 @@ class ExperimentGMM(object):
         self.saver = tf.train.Saver(tdl.core.get_variables(self.model))
 
     def restore(self, pathname=None):
+        '''Restore the weight values stored at pathname.
+
+        Args:
+            pathname: path where the variables checkpoints are stored.
+                It could point to a session folder, a checkpoints folder or
+                a specific checkpoint file. By default chooses the most recent
+                checkpoint.
+        '''
         def get_latest(pathname, filter=None):
             if filter is None:
                 filter = lambda x: True
