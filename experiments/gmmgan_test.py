@@ -43,8 +43,8 @@ def main():
                 dataset_name='celeb_a')
         else:
             experiment = ExperimentGMM()
-            if FLAGS.restore is not None:
-                experiment.restore(FLAGS.restore)
+            if FLAGS.checkpoint is not None:
+                experiment.restore(FLAGS.checkpoint)
         for step in tqdm.tqdm(range(int(FLAGS.n_steps))):
             while not experiment.run(n_steps=int(FLAGS.n_steps_save)):
                 print('------------------- RESTORING ---------------------')
