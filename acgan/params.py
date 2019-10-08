@@ -67,7 +67,7 @@ PARAMS = {
             },
         'gmmgan': {
             'model': {
-                'embedding_size': 64,
+                'embedding_size': 32,
                 'embedding': {'n_components': 100},
                 'encoder': {
                     'units': [32, 64, 128, 64],
