@@ -177,22 +177,30 @@ class GmmGan(MSG_GAN):
         return model
 
     @tdl.core.SubmodelInit
-    def encoder(self, units, kernels, strides, dropout=None, padding='same'):
+    def encoder(self, units, kernels, strides, dropout=None, padding='same',
+                pooling=None):
         '''CNN for recovering the encodding of a given image'''
         n_layers = len(units)
         kernels = self._to_list(kernels, n_layers)
         strides = self._to_list(strides, n_layers)
         padding = (padding if isinstance(padding, (list, tuple))
                    else [padding]*n_layers)
+        pooling = self._to_list(pooling, n_layers)
 
         model = self.EncoderModel()
         for i in range(len(units)):
-            model.add(Conv2DLayer(
+            # residual
+            residual = tdl.stacked.StackedLayers()
+            residual.add(Conv2DLayer(
                 filters=units[i], strides=strides[i],
                 kernel_size=kernels[i], padding=padding[i]))
-            model.add(tf_layers.LeakyReLU(LEAKY_RATE))
+            residual.add(tf_layers.LeakyReLU(LEAKY_RATE))
             if dropout is not None:
-                model.add(tf_layers.Dropout(rate=dropout))
+                residual.add(tf_layers.Dropout(rate=dropout))
+            # resnet
+            model.add(tdl.resnet.ResConv2D(residual=residual))
+            if i < len(pooling) and pooling[i] is not None:
+                model.add(tf_layers.MaxPooling2D(pool_size=pooling[i]))
 
         model.add(tf_layers.Flatten())
         model.add(AffineLayer(units=self.embedding_size))

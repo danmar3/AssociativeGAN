@@ -269,9 +269,14 @@ class BaseGAN(tdl.core.TdlModel):
 
     @staticmethod
     def _to_list(value, n_elements):
+        '''check if value is a list. If not, return a list with n_elements.
+
+        If value is an integer, each element is a 2-dim tuple (value, value).
+        If value is an iterable, each element of the new list is a tuple
+        with duplicated elements (value[i], value[i]) '''
         if isinstance(value, int):
             value = [value]*n_elements
-        if isinstance(value[0], int):
+        if isinstance(value[0], int) or (value[0] is None):
             value = [[vi, vi] for vi in value]
         assert len(value) == n_elements, \
             'list does not have the expected number of elements'

@@ -67,12 +67,13 @@ PARAMS = {
             },
         'gmmgan': {
             'model': {
-                'embedding_size': 32,
+                'embedding_size': 128,
                 'embedding': {'n_components': 100},
                 'encoder': {
-                    'units': [32, 64, 128, 64],
+                    'units': [32, 64, 64, 64],
                     'kernels': 3,
-                    'strides': 2},
+                    'strides': 1,
+                    'pooling': 2},
                 'generator': {
                     'init_shape': (4, 4, 512),
                     'units': [512, 512, 512, 256, 128],
