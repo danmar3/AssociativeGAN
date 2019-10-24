@@ -12,6 +12,10 @@ from .train import run_training
 from .model.gmm_gan import GmmGan
 
 
+def normalize_image(image):
+    return ((image-image.min())/(image.max()-image.min()))
+
+
 class ExperimentGMM(object):
     @classmethod
     def restore_session(cls, session_path, dataset_name):
@@ -55,7 +59,7 @@ class ExperimentGMM(object):
             dis=self.model.discriminator_trainer(
                 xreal=xreal, **self.params['discriminator_trainer']),
             enc=self.model.encoder_trainer(
-                **self.params['encoder_trainer']))
+                xreal=xreal, **self.params['encoder_trainer']))
         tdl.core.variables_initializer(self.trainer.gen.variables).run()
         tdl.core.variables_initializer(self.trainer.dis.variables).run()
         tdl.core.variables_initializer(self.trainer.enc.variables).run()
@@ -111,6 +115,11 @@ class ExperimentGMM(object):
                 self.session.run(self.trainer.enc.step['embedding'])
         return True
 
+    def visualize_clusters(self, ax=None):
+        if ax is None:
+            _, ax = plt.subplots(4, 4, figsize=(20, 20))
+
+
     def visualize(self, filename=None):
         if filename is None:
             folder = os.path.join(self.output_dir, 'images')
@@ -120,15 +129,13 @@ class ExperimentGMM(object):
             filename = '{}/generated_{}{:02d}{:02d}:{:02d}{:02d}.pdf'.format(
                 folder, now.year, now.month, now.day, now.hour, now.minute)
 
-        def normalize(image):
-            return ((image-image.min())/(image.max()-image.min()))
         fig, ax = plt.subplots(4, 4, figsize=(20, 20))
         ax = np.reshape(ax, 4*4)
         # dis.sim_pyramid[-1].eval()
         xsim = self.session.run(self.trainer.gen.xsim)
         for i in range(4*4):
             image = (xsim[i][:, :, :]+1)*0.5
-            ax[i].imshow(np.squeeze(normalize(image)),
+            ax[i].imshow(np.squeeze(normalize_image(image)),
                          interpolation='nearest')
             ax[i].axis('off')
         plt.savefig(filename)

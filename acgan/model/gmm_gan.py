@@ -48,6 +48,15 @@ class GmmEncoderTrainer(BaseTrainer):
             'embedding': tf.train.AdamOptimizer(learning_rate, beta1=beta1)
             }
 
+    @tdl.core.InputArgument
+    def xreal(self, value):
+        '''real images obtained from the dataset'''
+        tdl.core.assert_initialized(self, 'xreal', ['train_step'])
+        # noise_rate = self.model.noise_rate(self.train_step)
+        # if noise_rate is not None:
+        #     value = _add_noise(value, noise_rate)
+        return value
+
     @tdl.core.Submodel
     def embedding(self, _):
         tdl.core.assert_initialized(self, 'embedding', ['batch_size'])
@@ -67,7 +76,8 @@ class GmmEncoderTrainer(BaseTrainer):
     @tdl.core.Submodel
     def encoded(self, _):
         tdl.core.assert_initialized(self, 'embedding', ['xsim'])
-        return self.model.encoder(self.xsim)
+        return {'xsim': self.model.encoder(self.xsim),
+                'xreal': self.model.encoder(self.xreal)}
 
     def _loss_encoder(self, z, zpred):
         '''loss of the encoder network.'''
@@ -78,15 +88,20 @@ class GmmEncoderTrainer(BaseTrainer):
         #     tdl.core.array.reduce_sum_rightmost(
         #         (z - zpred)**2))
 
-    def _loss_embedding(self, zpred):
+    def _loss_embedding(self, zsim, zreal):
         '''loss of the random embedding.'''
-        return -self.model.embedding.log_prob(zpred.sample())
+        z_sample = tf.concat([zsim.sample(), zreal.sample()], axis=0)
+        return -self.model.embedding.log_prob(z_sample)
 
     @tdl.core.OutputValue
     def loss(self, _):
         tdl.core.assert_initialized(self, 'loss', ['embedding', 'encoded'])
-        return {'encoder': self._loss_encoder(self.embedding, self.encoded),
-                'embedding': self._loss_embedding(self.encoded)}
+        return {'encoder':
+                self._loss_encoder(self.embedding, self.encoded['xsim']),
+                'embedding':
+                self._loss_embedding(
+                    zsim=self.encoded['xsim'],
+                    zreal=self.encoded['xreal'])}
 
     @tdl.core.OutputValue
     def step(self, _):
@@ -210,7 +225,7 @@ class GmmGan(MSG_GAN):
         ))
         return model
 
-    def discriminator_trainer(self, batch_size, xreal=None, input_shape=None,
+    def discriminator_trainer(self, batch_size, xreal, input_shape=None,
                               optimizer=None, **kwargs):
         tdl.core.assert_initialized(
             self, 'discriminator_trainer',
@@ -234,7 +249,8 @@ class GmmGan(MSG_GAN):
             optimizer=optimizer,
             **kwargs)
 
-    def encoder_trainer(self, batch_size, optimizer=None, **kwargs):
+    def encoder_trainer(self, batch_size, xreal, optimizer=None,
+                        **kwargs):
         tdl.core.assert_initialized(
             self, 'discriminator_trainer',
             ['generator', 'discriminator', 'noise_rate', 'pyramid',
@@ -242,6 +258,6 @@ class GmmGan(MSG_GAN):
         if optimizer is None:
             optimizer = {'learning_rate': 0.0002, 'beta1': 0.0}
         return self.EncoderTrainer(
-            model=self, batch_size=batch_size,
+            model=self, batch_size=batch_size, xreal=xreal,
             optimizer=optimizer,
             **kwargs)
