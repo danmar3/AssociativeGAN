@@ -2,6 +2,7 @@ import tensorflow as tf
 import twodlearn as tdl
 import twodlearn.bayesnet
 import tensorflow.keras.layers as tf_layers
+import tensorflow_probability as tfp
 from .gmm import GMM
 from .msg_gan import (MSG_GAN, MSG_DiscriminatorTrainer, MSG_GeneratorTrainer,
                       AffineLayer, Conv2DLayer, LEAKY_RATE)
@@ -63,45 +64,55 @@ class GmmEncoderTrainer(BaseTrainer):
         sample = self.model.embedding(self.batch_size)
         return sample
 
-    @tdl.core.OutputValue
+    @tdl.core.Submodel
     def sim_pyramid(self, _):
         tdl.core.assert_initialized(self, 'sim_pyramid', ['embedding'])
         return self.generator.pyramid(self.embedding)
 
-    @tdl.core.OutputValue
+    @tdl.core.Submodel
     def xsim(self, _):
         tdl.core.assert_initialized(self, 'xsim', ['sim_pyramid'])
         return self.sim_pyramid[-1]
 
     @tdl.core.Submodel
     def encoded(self, _):
-        tdl.core.assert_initialized(self, 'embedding', ['xsim'])
+        tdl.core.assert_initialized(self, 'embedding', ['xsim', 'xreal'])
         return {'xsim': self.model.encoder(self.xsim),
                 'xreal': self.model.encoder(self.xreal)}
 
     def _loss_encoder(self, z, zpred):
-        '''loss of the encoder network.'''
+        '''loss of the encoder network p(z|x).'''
         return tf.reduce_mean(
             tdl.core.array.reduce_sum_rightmost(
                 -zpred.log_prob(z)))
-        # return tf.reduce_mean(
-        #     tdl.core.array.reduce_sum_rightmost(
-        #         (z - zpred)**2))
 
-    def _loss_embedding(self, zsim, zreal):
-        '''loss of the random embedding.'''
+    def _loss_embedding(self, zsim, zreal, embedding_kl=None):
+        '''loss of the marginal embedding p(z).'''
+        # negative likelihood
         z_sample = tf.concat([zsim.sample(), zreal.sample()], axis=0)
-        return -self.model.embedding.log_prob(z_sample)
+        loss = -self.model.embedding.log_prob(z_sample)
+        # kl loss
+        assert embedding_kl == 0.001
+        if embedding_kl is not None:
+            embedding = self.model.embedding
+            cat = embedding.dist.cat
+            n_comp = embedding.n_components
+            cat_ref = tfp.distributions.Categorical(logits=n_comp*[1.0])
+            kl_loss = tfp.distributions.kl_divergence(cat, cat_ref)
+            loss = loss + embedding_kl*kl_loss
+        # return
+        return loss
 
-    @tdl.core.OutputValue
-    def loss(self, _):
+    @tdl.core.SubmodelInit
+    def loss(self, embedding_kl=None):
         tdl.core.assert_initialized(self, 'loss', ['embedding', 'encoded'])
         return {'encoder':
                 self._loss_encoder(self.embedding, self.encoded['xsim']),
                 'embedding':
                 self._loss_embedding(
                     zsim=self.encoded['xsim'],
-                    zreal=self.encoded['xreal'])}
+                    zreal=self.encoded['xreal'],
+                    embedding_kl=embedding_kl)}
 
     @tdl.core.OutputValue
     def step(self, _):

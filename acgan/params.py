@@ -67,7 +67,7 @@ PARAMS = {
             },
         'gmmgan': {
             'model': {
-                'embedding_size': 128,
+                'embedding_size': 64,
                 'embedding': {'n_components': 100},
                 'encoder': {
                     'units': [32, 64, 64, 64],
@@ -97,7 +97,45 @@ PARAMS = {
             'encoder_trainer': {
                 'batch_size': 16,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+                'loss': {'embedding_kl': 0.001}
                 }
             }
-        }
+        },
+    'celeb_a_hd_512': {
+        'gmmgan': {
+            'model': {
+                'embedding_size': 128,
+                'embedding': {'n_components': 100},
+                'encoder': {
+                    'units': [32, 64, 64, 64, 64],
+                    'kernels': 3,
+                    'strides': 1,
+                    'pooling': 2},
+                'generator': {
+                    'init_shape': (4, 4, 512),
+                    'units': [512, 512, 512, 256, 128, 64],
+                    'outputs': 3,
+                    'kernels': 3,
+                    'strides': 2},
+                'discriminator': {
+                    'units': [64, 128, 256, 512, 512, 512],
+                    'kernels': 3,
+                    'strides': 2,
+                    'dropout': None}
+                },
+            'generator_trainer': {
+                'batch_size': 16,
+                'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+                },
+            'discriminator_trainer': {
+                'batch_size': 16,
+                'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+                },
+            'encoder_trainer': {
+                'batch_size': 16,
+                'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+                'loss': {'embedding_kl': 0.001}
+                }
+            }
+        },
     }
