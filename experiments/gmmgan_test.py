@@ -24,11 +24,15 @@ def main():
     parser.add_argument('--n_steps_save', default=10,
                         help=("number of steps to run before save"))
     parser.add_argument('--gpu', default=0, help='gpu to use')
+    parser.add_argument('--model', default='gmmgan', help='model to test')
 
     FLAGS = parser.parse_args()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu)
-
-    # session = tf.compat.v1.Session()
+    # cleanup
+    assert FLAGS.model == 'gmmgan', \
+        'only gmmgan model is supported at the moment'
+    acgan.saver.clean_folder(data_dir=os.path.join('tmp', FLAGS.model))
+    # create graph
     graph = tf.Graph()
     config = tf.ConfigProto(
         allow_soft_placement=True,
@@ -37,6 +41,7 @@ def main():
 
     session = tf.compat.v1.Session(graph=graph, config=config)
     with graph.as_default(), session.as_default():
+        # instantiate experiment
         if FLAGS.session is not None:
             experiment = ExperimentGMM.restore_session(
                 session_path=FLAGS.session,
@@ -45,12 +50,13 @@ def main():
             experiment = ExperimentGMM()
             if FLAGS.checkpoint is not None:
                 experiment.restore(FLAGS.checkpoint)
+        # run training
         for step in tqdm.tqdm(range(int(FLAGS.n_steps))):
             while not experiment.run(n_steps=int(FLAGS.n_steps_save)):
                 print('------------------- RESTORING ---------------------')
                 experiment.restore()
             experiment.save()
-            experiment.visualize()
+            experiment.visualize(save=True)
 
 
 if __name__ == "__main__":

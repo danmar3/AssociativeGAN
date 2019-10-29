@@ -212,7 +212,7 @@ class ExperimentGMM(object):
                          interpolation='nearest')
             ax[i].axis('off')
 
-    def visualize(self, filename=None):
+    def visualize(self, save=False, filename=None):
         if filename is None:
             folder = os.path.join(self.output_dir, 'images')
             if not os.path.exists(folder):
@@ -247,7 +247,8 @@ class ExperimentGMM(object):
         ax = reserve_ax(start=22, scale=(1, 1), shape=(8, 10))
         self.visualize_reconstruction(ax=ax)
 
-        plt.savefig(filename)
+        if save:
+            plt.savefig(filename)
 
     def save(self, folder=None):
         '''save model params'''
