@@ -10,10 +10,36 @@ from . import data
 from . import params as acgan_params
 from .train import run_training
 from .model.gmm_gan import GmmGan
+from twodlearn.core import nest
+import functools
 
 
 def normalize_image(image):
     return ((image-image.min())/(image.max()-image.min()))
+
+
+def eager_function(func):
+    @functools.wraps(func)
+    def wrapper(self, **kwargs):
+        if not hasattr(self, '__tdl__'):
+            setattr(self, '__tdl__', tdl.core.common.__TDL__(self))
+        if not hasattr(self.__tdl__, func.__name__):
+            tf_kwargs = {key: tf.placeholder(
+                shape=[None] + [i for i in value.shape[1:]],
+                dtype=value.dtype)
+                         for key, value in kwargs.items()}
+            out = func(self, **tf_kwargs)
+            setattr(self.__tdl__, func.__name__, {
+                'out': out, 'kwargs': tf_kwargs})
+        tf_nodes = getattr(self.__tdl__, func.__name__)
+        session = tf.get_default_session()
+        feed_dict = {tf_nodes['kwargs'][key]: value
+                     for key, value in kwargs.items()}
+        out_ = session.run(tf_nodes['out'], feed_dict=feed_dict)
+        return nest.pack_sequence_as(
+            out_, [out_i for out_i in nest.flatten(out_)
+                   if out_i is not None])
+    return wrapper
 
 
 class ExperimentGMM(object):
@@ -115,10 +141,76 @@ class ExperimentGMM(object):
                 self.session.run(self.trainer.enc.step['embedding'])
         return True
 
-    def visualize_clusters(self, ax=None):
-        if ax is None:
-            _, ax = plt.subplots(4, 4, figsize=(20, 20))
+    @eager_function
+    def reconstruct(self, x_seed):
+        encoded = self.model.encoder(x_seed)
+        xrecon = self.model.generator(encoded.sample())
+        return xrecon
 
+    @eager_function
+    def _set_logits(self, logits):
+        logits_h = self.model.embedding.logits
+        logits_op = logits_h.assign(logits)
+        return logits_op
+
+    def set_component(self, component):
+        logits_h = self.model.embedding.logits
+        logits = np.array(
+            [30.0 if i == component else 0.0
+             for i in range(logits_h.shape[-1].value)],
+            dtype=logits_h.dtype.as_numpy_dtype)
+        self._set_logits(logits=logits)
+
+    def visualize_clusters(self, ax=None):
+        '''visualize samples from gmm clusters.'''
+        if ax is None:
+            _, ax = plt.subplots(10, 10, figsize=(15, 15))
+        _logits = self.model.embedding.logits.value().eval()
+        n_components = _logits.shape[0]
+
+        max_components = ax.shape[0]
+        n_images = ax.shape[1]
+        for component_idx, component in enumerate(np.random.choice(
+                n_components, max_components, replace=False)):
+            self.set_component(component)
+            xsim = self.session.run(self.trainer.gen.xsim)
+            for img_idx in range(n_images):
+                image = normalize_image(xsim[img_idx, ...])
+                ax[component_idx, img_idx].imshow(
+                    np.squeeze(image),
+                    interpolation='nearest')
+                ax[component_idx, img_idx].axis('off')
+        self._set_logits(logits=_logits)
+
+    def visualize_reconstruction(self, ax=None):
+        '''visualize the reconstruction of real images.'''
+        if ax is None:
+            fig, ax = plt.subplots(5, 8, figsize=(18, 10))
+        xreal = self.trainer.dis.xreal.eval()
+
+        for i in range(ax.shape[1]):
+            ax[0, i].imshow(np.squeeze(normalize_image(xreal[i, ...])),
+                            interpolation='nearest')
+            ax[0, i].axis('off')
+        for j in range(1, ax.shape[0]):
+            xrecon = self.reconstruct(x_seed=xreal)
+            for i in range(ax.shape[1]):
+                ax[j, i].imshow(np.squeeze(normalize_image(xrecon[i, ...])),
+                                interpolation='nearest')
+                ax[j, i].axis('off')
+
+    def visualize_imgs(self, ax=None):
+        if ax is None:
+            fig, ax = plt.subplots(4, 4, figsize=(20, 20))
+        # dis.sim_pyramid[-1].eval()
+        n_elements = functools.reduce(lambda x, y: x*y, ax.shape, 1)
+        ax = np.reshape(ax, n_elements)
+        xsim = self.session.run(self.trainer.gen.xsim)
+        for i in range(n_elements):
+            image = (xsim[i][:, :, :]+1)*0.5
+            ax[i].imshow(np.squeeze(normalize_image(image)),
+                         interpolation='nearest')
+            ax[i].axis('off')
 
     def visualize(self, filename=None):
         if filename is None:
@@ -129,15 +221,32 @@ class ExperimentGMM(object):
             filename = '{}/generated_{}{:02d}{:02d}:{:02d}{:02d}.pdf'.format(
                 folder, now.year, now.month, now.day, now.hour, now.minute)
 
-        fig, ax = plt.subplots(4, 4, figsize=(20, 20))
-        ax = np.reshape(ax, 4*4)
-        # dis.sim_pyramid[-1].eval()
-        xsim = self.session.run(self.trainer.gen.xsim)
-        for i in range(4*4):
-            image = (xsim[i][:, :, :]+1)*0.5
-            ax[i].imshow(np.squeeze(normalize_image(image)),
-                         interpolation='nearest')
-            ax[i].axis('off')
+        fig = plt.figure(figsize=(13, 3*13))
+        gs = fig.add_gridspec(30, 10)
+
+        def reserve_ax(start, scale, shape):
+            if isinstance(scale, int):
+                scale = (scale, scale)
+            ax = np.array(
+                [fig.add_subplot(gs[
+                    (start + i*scale[0]):(start + i*scale[0]+scale[0]),
+                    j*scale[1]:j*scale[1]+scale[1]])
+                 for i in range(shape[0]) for j in range(shape[1])])
+            return np.reshape(ax, shape)
+
+        ax = reserve_ax(start=0, scale=2, shape=(5, 5))
+        self.visualize_imgs(ax=ax)
+
+        ax = reserve_ax(start=10, scale=1, shape=(10, 10))
+        self.visualize_clusters(ax=ax)
+
+        ax = reserve_ax(start=20, scale=(2, 10), shape=(1, 1))
+        probs = self.model.embedding.dist.cat.probs.eval()
+        ax[0, 0].bar(x=range(probs.shape[0]), height=probs)
+
+        ax = reserve_ax(start=22, scale=(1, 1), shape=(8, 10))
+        self.visualize_reconstruction(ax=ax)
+
         plt.savefig(filename)
 
     def save(self, folder=None):
