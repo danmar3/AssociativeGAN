@@ -89,7 +89,8 @@ def load_celeb_a_128(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_celeb_hd_512(batch_size, split=tfds.Split.TRAIN):
+def load_celeb_hd_512(batch_size, split=tfds.Split.TRAIN,
+                      folder='datasets/celeb_hd'):
     def map_fn(batch):
         batch = tf.cast(batch['image'], tf.float32)
         batch = tf.image.resize_bilinear(
