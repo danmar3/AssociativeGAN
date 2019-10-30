@@ -74,8 +74,9 @@ class ExperimentGMM(object):
 
         # init model
         self._init_params(params, dataset_name)
-        dataset = data.load_celeb_a_128_cropped(
-            self.params['generator_trainer']['batch_size'])
+        dataset = data.load(
+            name=dataset_name,
+            batch_size=self.params['generator_trainer']['batch_size'])
         self.model = GmmGan(**self.params['model'])
         iter = dataset.make_one_shot_iterator()
         xreal = iter.get_next()
@@ -174,6 +175,10 @@ class ExperimentGMM(object):
                 n_components, max_components, replace=False)):
             self.set_component(component)
             xsim = self.session.run(self.trainer.gen.xsim)
+            while xsim.shape[0] < n_images:
+                xsim = np.concatenate(
+                    [xsim, self.session.run(self.trainer.gen.xsim)],
+                    axis=0)
             for img_idx in range(n_images):
                 image = normalize_image(xsim[img_idx, ...])
                 ax[component_idx, img_idx].imshow(
@@ -186,7 +191,12 @@ class ExperimentGMM(object):
         '''visualize the reconstruction of real images.'''
         if ax is None:
             fig, ax = plt.subplots(5, 8, figsize=(18, 10))
+        n_real = ax.shape[1]
         xreal = self.trainer.dis.xreal.eval()
+        while xreal.shape[0] < n_real:
+            xreal = np.concatenate(
+                [xreal, self.trainer.dis.xreal.eval()],
+                axis=0)
 
         for i in range(ax.shape[1]):
             ax[0, i].imshow(np.squeeze(normalize_image(xreal[i, ...])),
@@ -206,6 +216,10 @@ class ExperimentGMM(object):
         n_elements = functools.reduce(lambda x, y: x*y, ax.shape, 1)
         ax = np.reshape(ax, n_elements)
         xsim = self.session.run(self.trainer.gen.xsim)
+        while xsim.shape[0] < n_elements:
+            xsim = np.concatenate(
+                [xsim, self.session.run(self.trainer.gen.xsim)],
+                axis=0)
         for i in range(n_elements):
             image = (xsim[i][:, :, :]+1)*0.5
             ax[i].imshow(np.squeeze(normalize_image(image)),

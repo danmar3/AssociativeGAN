@@ -24,6 +24,7 @@ def main():
     parser.add_argument('--n_steps_save', default=10,
                         help=("number of steps to run before save"))
     parser.add_argument('--gpu', default=0, help='gpu to use')
+    parser.add_argument('--dataset', default='celeb_a', help='dataset to use')
     parser.add_argument('--model', default='gmmgan', help='model to test')
 
     FLAGS = parser.parse_args()
@@ -45,9 +46,9 @@ def main():
         if FLAGS.session is not None:
             experiment = ExperimentGMM.restore_session(
                 session_path=FLAGS.session,
-                dataset_name='celeb_a')
+                dataset_name=FLAGS.dataset)
         else:
-            experiment = ExperimentGMM()
+            experiment = ExperimentGMM(dataset_name=FLAGS.dataset)
             if FLAGS.checkpoint is not None:
                 experiment.restore(FLAGS.checkpoint)
         # run training

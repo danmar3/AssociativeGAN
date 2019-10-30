@@ -68,11 +68,13 @@ def imagenet2012_train(data_dir, bbox_data=None):
                     continue
 
 
-def load_imagenet2012(data_dir, batch_size, crop=False):
+def load_imagenet2012(data_dir, batch_size, crop=False, resolution=512):
     def img_generator():
         bbox_data = extract_bbox_train(data_dir=data_dir)
         for item in imagenet2012_train(data_dir, bbox_data=bbox_data):
             if len(item['image'].shape) != 3:
+                continue
+            if item['image'].shape[-1] != 3:
                 continue
             for bbox in item['bbox']:
                 yield {'image': item['image'],
@@ -90,7 +92,7 @@ def load_imagenet2012(data_dir, batch_size, crop=False):
                 target_height=batch['ylim'][1]-batch['ylim'][0],
                 target_width=batch['xlim'][1]-batch['xlim'][0])
         image = tf.image.resize_bilinear(
-            image, size=(512, 512),
+            image, size=(resolution, resolution),
             align_corners=False)
         image = (image-127.5)/127.5
         return image[0, ...]

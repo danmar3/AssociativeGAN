@@ -1,5 +1,6 @@
 import tensorflow as tf
 import tensorflow_datasets as tfds
+from . import imagenet2012
 
 DATA_DIR = None
 
@@ -104,3 +105,22 @@ def load_celeb_hd_512(batch_size, split=tfds.Split.TRAIN,
         .map(map_fn)\
         .prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
+
+
+def load(name, batch_size):
+    def load_imagenet(batch_size, resolution):
+        return imagenet2012.load_imagenet2012(
+            data_dir='/data/shared/datasets/images/',
+            batch_size=batch_size,
+            crop=True, resolution=resolution)
+    loaders = {
+        'celeb_a':
+        load_celeb_a_128_cropped,
+        'imagenet_512':
+        lambda batch_size: load_imagenet(batch_size, 512),
+        'imagenet_256':
+        lambda batch_size: load_imagenet(batch_size, 256),
+        'imagenet_128':
+        lambda batch_size: load_imagenet(batch_size, 128)
+    }
+    return loaders[name](batch_size)
