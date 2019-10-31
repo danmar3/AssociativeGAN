@@ -3,9 +3,14 @@ import tarfile
 import numpy as np
 from PIL import Image
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import tensorflow as tf
 
+# mkdir ../extracted/ILSVRC2012_bbox_train
+# tar xvzf ILSVRC2012_bbox_train_v2.tar.gz -C ../extracted/ILSVRC2012_bbox_train
+# mkdir ../extracted/ILSVRC2012_bbox_val
+# tar xvzf ILSVRC2012_bbox_val_v3.tgz -C ../extracted/ILSVRC2012_bbox_val
 
 def extract_bbox(class_folder):
     def extract_xml(file):
@@ -41,7 +46,11 @@ def tar_generator(fileobj, bbox_data=None):
             'label': member.name.split('_')[0],
             'image': np.array(Image.open(imgobj))}
         if bbox_data is not None:
-            img_data['bbox'] = bbox_data[member.name.split('.')[0] + '.xml']
+            key = member.name.split('.')[0] + '.xml'
+            try:
+                img_data['bbox'] = bbox_data[key]
+            except KeyError as err:
+                continue
         yield img_data
     data.close()
 
@@ -69,6 +78,9 @@ def imagenet2012_train(data_dir, bbox_data=None):
 
 
 def load_imagenet2012(data_dir, batch_size, crop=False, resolution=512):
+    if data_dir is None:
+        data_dir = os.path.join(str(Path.home()), 'tensorflow_datasets')
+
     def img_generator():
         bbox_data = extract_bbox_train(data_dir=data_dir)
         for item in imagenet2012_train(data_dir, bbox_data=bbox_data):

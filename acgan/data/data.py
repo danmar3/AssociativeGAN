@@ -4,6 +4,9 @@ from . import imagenet2012
 
 DATA_DIR = None
 
+def set_datadir(data_dir):
+    global DATA_DIR
+    DATA_DIR = data_dir
 
 def load_mnist(batch_size, split=tfds.Split.TRAIN):
     dataset, info = tfds.load(
@@ -110,7 +113,7 @@ def load_celeb_hd_512(batch_size, split=tfds.Split.TRAIN,
 def load(name, batch_size):
     def load_imagenet(batch_size, resolution):
         return imagenet2012.load_imagenet2012(
-            data_dir='/data/shared/datasets/images/',
+            data_dir=DATA_DIR,
             batch_size=batch_size,
             crop=True, resolution=resolution)
     loaders = {

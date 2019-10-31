@@ -92,7 +92,6 @@ class GmmEncoderTrainer(BaseTrainer):
         z_sample = tf.concat([zsim.sample(), zreal.sample()], axis=0)
         loss = -self.model.embedding.log_prob(z_sample)
         # kl loss
-        assert embedding_kl == 0.001
         if embedding_kl is not None:
             embedding = self.model.embedding
             cat = embedding.dist.cat

@@ -26,13 +26,18 @@ def main():
     parser.add_argument('--gpu', default=0, help='gpu to use')
     parser.add_argument('--dataset', default='celeb_a', help='dataset to use')
     parser.add_argument('--model', default='gmmgan', help='model to test')
+    parser.add_argument('--datadir', default=None, help='datasets path')
+    parser.add_argument('--clean', default=False,
+                        help='clearn directory before start')
 
     FLAGS = parser.parse_args()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu)
+    acgan.data.set_datadir(FLAGS.datadir)
     # cleanup
     assert FLAGS.model == 'gmmgan', \
         'only gmmgan model is supported at the moment'
-    acgan.saver.clean_folder(data_dir=os.path.join('tmp', FLAGS.model))
+    if FLAGS.clean:
+        acgan.saver.clean_folder(data_dir=os.path.join('tmp', FLAGS.model))
     # create graph
     graph = tf.Graph()
     config = tf.ConfigProto(
