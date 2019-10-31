@@ -99,7 +99,15 @@ class GmmEncoderTrainer(BaseTrainer):
             n_comp = embedding.n_components
             cat_ref = tfp.distributions.Categorical(logits=n_comp*[1.0])
             kl_loss = tfp.distributions.kl_divergence(cat, cat_ref)
-            loss = loss + embedding_kl*kl_loss
+            loss = tf.reduce_mean(loss) + embedding_kl*kl_loss
+            # Gaussian means
+            normal_ref = tfp.distributions.MultivariateNormalDiag(
+                    loc=tf.zeros([embedding.n_dims]),
+                    scale_diag=tf.ones([embedding.n_dims]))
+            loc_batch = tf.stack([comp.loc for comp in embedding.components],
+                                 axis=0)
+            mean_loss = -normal_ref.log_prob(loc_batch)
+            loss = loss + embedding_kl * tf.reduce_mean(mean_loss)
         # return
         return loss
 
