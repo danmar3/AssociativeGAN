@@ -5,11 +5,22 @@ MAX_UPDATE_STEPS = 10
 
 
 def run_training(dis, gen, n_steps=1000, n_logging=100, session=None,
-                 dis_steps=None):
+                 dis_steps=None, ind=None):
+    ''' Run GAN training
+
+    Args:
+        dis: discriminator trainer.
+        gen: generator trainer.
+        n_steps: maximum number of training steps.
+        n_logging: how often to update the progress bar with the metrics.
+        dis_steps: number of discriminator steps to perform.
+        ind: indicator displayed in the progress bar.
+    '''
     def print_losses(progress_bar, session):
         dis_step, dis_loss, gen_step, gen_loss = \
             session.run([dis.train_step, dis.loss, gen.train_step, gen.loss])
-        info = 'step(d/g) {}/{} | dis {:.4f} | gen {:.4f} '.format(
+        info = '' if ind is None else '{} | '.format(ind)
+        info = info + 'step(d/g) {}/{} | dis {:.4f} | gen {:.4f} '.format(
             dis_step, gen_step, dis_loss, gen_loss)
         progress_bar.set_description(info)
 

@@ -97,7 +97,7 @@ PARAMS = {
             'encoder_trainer': {
                 'batch_size': 16,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
-                'loss': {'embedding_kl': 0.001}
+                'loss': {'embedding_kl': 0.001, 'use_zsim': True}
                 }
             }
         },
@@ -208,7 +208,7 @@ PARAMS = {
             'encoder_trainer': {
                 'batch_size': 8,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
-                'loss': {'embedding_kl': 0.001}
+                'loss': {'embedding_kl': 0.01, 'use_zsim': False}
                 }
             }
         },

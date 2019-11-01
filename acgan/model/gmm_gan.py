@@ -86,10 +86,14 @@ class GmmEncoderTrainer(BaseTrainer):
             tdl.core.array.reduce_sum_rightmost(
                 -zpred.log_prob(z)))
 
-    def _loss_embedding(self, zsim, zreal, embedding_kl=None):
+    def _loss_embedding(self, zsim, zreal, embedding_kl=None,
+                        use_zsim=True):
         '''loss of the marginal embedding p(z).'''
         # negative likelihood
-        z_sample = tf.concat([zsim.sample(), zreal.sample()], axis=0)
+        if use_zsim:
+            z_sample = tf.concat([zsim.sample(), zreal.sample()], axis=0)
+        else:
+            z_sample = zreal.sample()
         loss = -self.model.embedding.log_prob(z_sample)
         # kl loss
         if embedding_kl is not None:
@@ -111,7 +115,7 @@ class GmmEncoderTrainer(BaseTrainer):
         return loss
 
     @tdl.core.SubmodelInit
-    def loss(self, embedding_kl=None):
+    def loss(self, embedding_kl=None, use_zsim=True):
         tdl.core.assert_initialized(self, 'loss', ['embedding', 'encoded'])
         return {'encoder':
                 self._loss_encoder(self.embedding, self.encoded['xsim']),
@@ -119,7 +123,8 @@ class GmmEncoderTrainer(BaseTrainer):
                 self._loss_embedding(
                     zsim=self.encoded['xsim'],
                     zreal=self.encoded['xreal'],
-                    embedding_kl=embedding_kl)}
+                    embedding_kl=embedding_kl,
+                    use_zsim=use_zsim)}
 
     @tdl.core.OutputValue
     def step(self, _):

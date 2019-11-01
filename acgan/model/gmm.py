@@ -1,6 +1,7 @@
 import twodlearn as tdl
 import tensorflow as tf
 import tensorflow_probability as tfp
+import numpy as np
 
 
 @tdl.core.create_init_docstring
@@ -16,15 +17,16 @@ class GMM(tdl.core.layers.Layer):
                    trainable=True, tolerance=1e-5):
         tdl.core.assert_initialized(
             self, 'components', ['n_components', 'n_dims'])
+        max_scale = np.power(1.0/self.n_components, 1.0/np.prod(self.n_dims))
         components = [
             tdl.core.SimpleNamespace(
               loc=tf.Variable(
                   tf.truncated_normal(shape=[self.n_dims], mean=init_loc),
                   trainable=trainable),
-              scale=tdl.constrained.PositiveVariable(
-                  init_scale*tf.ones([self.n_dims]),
-                  tolerance=tolerance,
-                  trainable=trainable))
+              scale=tdl.constrained.ConstrainedVariable(
+                  0.9*max_scale*tf.ones([self.n_dims]),
+                  min=tolerance,
+                  max=max_scale))
             for k in range(self.n_components)]
         return components
 

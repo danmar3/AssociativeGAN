@@ -27,8 +27,11 @@ def main():
     parser.add_argument('--dataset', default='celeb_a', help='dataset to use')
     parser.add_argument('--model', default='gmmgan', help='model to test')
     parser.add_argument('--datadir', default=None, help='datasets path')
-    parser.add_argument('--clean', default=False,
+    parser.add_argument('--clean', default=False, action='store_true',
                         help='clearn directory before start')
+    parser.add_argument(
+        '--indicator', default=None,
+        help='indicator printed during logging to identify the experiment')
 
     FLAGS = parser.parse_args()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu)
@@ -40,20 +43,23 @@ def main():
         acgan.saver.clean_folder(data_dir=os.path.join('tmp', FLAGS.model))
     # create graph
     graph = tf.Graph()
-    config = tf.ConfigProto(
-        allow_soft_placement=True,
-        log_device_placement=True,
-        operation_timeout_in_ms=1000)
+    # config = tf.ConfigProto(
+    #    # allow_soft_placement=True,
+    #    # log_device_placement=True,
+    #    # operation_timeout_in_ms=1000
+    #    )
 
-    session = tf.compat.v1.Session(graph=graph, config=config)
+    session = tf.compat.v1.Session(graph=graph)
     with graph.as_default(), session.as_default():
         # instantiate experiment
         if FLAGS.session is not None:
             experiment = ExperimentGMM.restore_session(
                 session_path=FLAGS.session,
-                dataset_name=FLAGS.dataset)
+                dataset_name=FLAGS.dataset,
+                indicator=FLAGS.indicator)
         else:
-            experiment = ExperimentGMM(dataset_name=FLAGS.dataset)
+            experiment = ExperimentGMM(dataset_name=FLAGS.dataset,
+                                       indicator=FLAGS.indicator)
             if FLAGS.checkpoint is not None:
                 experiment.restore(FLAGS.checkpoint)
         # run training

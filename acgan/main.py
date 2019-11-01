@@ -44,10 +44,11 @@ def eager_function(func):
 
 class ExperimentGMM(object):
     @classmethod
-    def restore_session(cls, session_path, dataset_name):
+    def restore_session(cls, session_path, dataset_name, indicator=None):
         with open(os.path.join(session_path, 'params.json'), "r") as file_h:
             params = json.load(file_h)
-        experiment = cls(dataset_name=dataset_name, params=params)
+        experiment = cls(dataset_name=dataset_name, params=params,
+                         indicator=indicator)
         experiment.restore(session_path)
         return experiment
 
@@ -55,13 +56,17 @@ class ExperimentGMM(object):
         if params is None:
             params = acgan_params.PARAMS[dataset_name][self.name]
         self.params = params
+        self.params['indicator'] = self.indicator
         filename = os.path.join(self.output_dir, 'params.json')
         with open(filename, 'w') as file_h:
             json.dump(self.params, file_h)
 
-    def __init__(self, dataset_name='celeb_a', params=None):
+    def __init__(self, dataset_name='celeb_a', params=None, indicator=None):
         self.name = 'gmmgan'
-        self.session = tf.InteractiveSession()
+        self.indicator = indicator
+        self.session = (tf.compat.v1.get_default_session()
+                        if tf.compat.v1.get_default_session() is not None
+                        else tf.InteractiveSession())
 
         # init output_dir
         now = datetime.datetime.now()
@@ -134,7 +139,8 @@ class ExperimentGMM(object):
         for trial in tqdm.tqdm(range(n_steps)):
             if not run_training(
                     dis=self.trainer.dis, gen=self.trainer.gen,
-                    n_steps=200, n_logging=10):
+                    n_steps=200, n_logging=10,
+                    ind=self.indicator):
                 return False
             for i in tqdm.tqdm(range(200)):
                 self.session.run(self.trainer.enc.step['encoder'])
@@ -171,8 +177,14 @@ class ExperimentGMM(object):
 
         max_components = ax.shape[0]
         n_images = ax.shape[1]
-        for component_idx, component in enumerate(np.random.choice(
-                n_components, max_components, replace=False)):
+        # comp_list = np.random.choice(
+        #    n_components, max_components, replace=False)
+        comp_sorted = np.argsort(_logits)[::-1]
+        comp_list = np.concatenate([
+            comp_sorted[:max_components//2],
+            comp_sorted[-(max_components-max_components//2):]])
+        assert len(comp_list) == max_components
+        for component_idx, component in enumerate(comp_list):
             self.set_component(component)
             xsim = self.session.run(self.trainer.gen.xsim)
             while xsim.shape[0] < n_images:
