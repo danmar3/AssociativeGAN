@@ -205,7 +205,16 @@ class GmmGan(MSG_GAN):
     DiscriminatorTrainer = GmmDiscriminatorTrainer
 
     @tdl.core.SubmodelInit
-    def embedding(self, n_components, init_loc=1e-5, init_scale=1.0):
+    def embedding(self, n_components, init_loc=1e-5, init_scale=1.0,
+                  min_scale_p=None):
+        '''Embedding model P(z)
+
+        Args:
+            n_components: number of clusters.
+            init_loc: init mean.
+            init_scale: init scale.
+            min_scale_p: minimum scale (in percentage of maximum).
+        '''
         tdl.core.assert_initialized(self, 'embedding', ['embedding_size'])
         model = self.EmbeddingModel(
             n_dims=self.embedding_size,

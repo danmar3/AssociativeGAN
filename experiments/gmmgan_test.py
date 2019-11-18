@@ -64,7 +64,9 @@ def main():
                 experiment.restore(FLAGS.checkpoint)
         # run training
         for step in tqdm.tqdm(range(int(FLAGS.n_steps))):
-            while not experiment.run(n_steps=int(FLAGS.n_steps_save)):
+            while not experiment.run(
+                    n_steps=int(FLAGS.n_steps_save),
+                    **experiment.params['run']):
                 print('------------------- RESTORING ---------------------')
                 experiment.restore()
             experiment.save()

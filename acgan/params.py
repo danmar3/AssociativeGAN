@@ -1,4 +1,4 @@
-
+import copy
 
 PARAMS = {
     'mnist': {
@@ -68,7 +68,7 @@ PARAMS = {
         'gmmgan': {
             'model': {
                 'embedding_size': 64,
-                'embedding': {'n_components': 100},
+                'embedding': {'n_components': 100, 'min_scale_p': 0.1},
                 'encoder': {
                     'units': [32, 64, 64, 64],
                     'kernels': 3,
@@ -98,7 +98,12 @@ PARAMS = {
                 'batch_size': 16,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
                 'loss': {'embedding_kl': 0.001, 'use_zsim': True}
-                }
+                },
+            'run': {
+                'gan_steps': 200,
+                'encoder_steps': 200,
+                'embedding_steps': 20,
+                'homogenize': True}
             }
         },
     'celeb_a_hd_512': {
@@ -135,6 +140,11 @@ PARAMS = {
                 'batch_size': 16,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
                 'loss': {'embedding_kl': 0.001}
+                },
+            'run': {
+                'gan_steps': 200,
+                'encoder_steps': 200,
+                'embedding_steps': 20,
                 }
             }
         },
@@ -172,6 +182,11 @@ PARAMS = {
                 'batch_size': 4,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
                 'loss': {'embedding_kl': 0.001}
+                },
+            'run': {
+                'gan_steps': 200,
+                'encoder_steps': 200,
+                'embedding_steps': 20,
                 }
             }
         },
@@ -208,7 +223,12 @@ PARAMS = {
             'encoder_trainer': {
                 'batch_size': 8,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
-                'loss': {'embedding_kl': 0.01, 'use_zsim': False}
+                'loss': {'embedding_kl': 0.01, 'use_zsim': True}
+                },
+            'run': {
+                'gan_steps': 200,
+                'encoder_steps': 200,
+                'embedding_steps': 20,
                 }
             }
         },
@@ -246,7 +266,17 @@ PARAMS = {
                 'batch_size': 16,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
                 'loss': {'embedding_kl': 0.001}
+                },
+            'run': {
+                'gan_steps': 200,
+                'encoder_steps': 200,
+                'embedding_steps': 20,
                 }
             }
         },
     }
+
+
+PARAMS['rockps'] = {'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])}
+
+PARAMS['cats_vs_dogs'] = {'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])}

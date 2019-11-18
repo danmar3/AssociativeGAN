@@ -135,16 +135,30 @@ class ExperimentGMM(object):
               ''.format(pathname))
         self.saver.restore(self.session, pathname)
 
-    def run(self, n_steps=100):
+    def run(self, n_steps=100, **kwargs):
+        if not kwargs:
+            kwargs = self.params['run']
         for trial in tqdm.tqdm(range(n_steps)):
+            # Train GAN
+            if kwargs['homogenize']:
+                logits_h = self.model.embedding.logits
+                _logits = logits_h.value().eval()
+                logits = np.zeros(logits_h.shape.as_list(),
+                                  dtype=logits_h.dtype.as_numpy_dtype)
+                self._set_logits(logits=logits)
+
             if not run_training(
                     dis=self.trainer.dis, gen=self.trainer.gen,
-                    n_steps=200, n_logging=10,
+                    n_steps=kwargs['gan_steps'], n_logging=10,
                     ind=self.indicator):
                 return False
-            for i in tqdm.tqdm(range(200)):
+            if kwargs['homogenize']:
+                self._set_logits(logits=_logits)
+            # Train encoder
+            for i in tqdm.tqdm(range(kwargs['encoder_steps'])):
                 self.session.run(self.trainer.enc.step['encoder'])
-            for i in tqdm.tqdm(range(20)):
+            # Train embedding
+            for i in tqdm.tqdm(range(kwargs['embedding_steps'])):
                 self.session.run(self.trainer.enc.step['embedding'])
         return True
 
@@ -275,6 +289,7 @@ class ExperimentGMM(object):
 
         if save:
             plt.savefig(filename)
+            plt.close()
 
     def save(self, folder=None):
         '''save model params'''

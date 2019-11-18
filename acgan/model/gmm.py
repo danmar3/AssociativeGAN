@@ -14,10 +14,15 @@ class GMM(tdl.core.layers.Layer):
     @tdl.core.SubmodelInit(lazzy=True)
     def components(self,
                    init_loc=1e-5, init_scale=1.0,
-                   trainable=True, tolerance=1e-5):
+                   trainable=True, tolerance=1e-5,
+                   min_scale_p=None):
         tdl.core.assert_initialized(
             self, 'components', ['n_components', 'n_dims'])
         max_scale = np.power(1.0/self.n_components, 1.0/np.prod(self.n_dims))
+        if min_scale_p:
+            min_scale = tolerance + min_scale_p*max_scale
+        else:
+            min_scale = tolerance
         components = [
             tdl.core.SimpleNamespace(
               loc=tf.Variable(
@@ -25,7 +30,7 @@ class GMM(tdl.core.layers.Layer):
                   trainable=trainable),
               scale=tdl.constrained.ConstrainedVariable(
                   0.9*max_scale*tf.ones([self.n_dims]),
-                  min=tolerance,
+                  min=min_scale,
                   max=max_scale))
             for k in range(self.n_components)]
         return components
