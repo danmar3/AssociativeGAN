@@ -97,7 +97,7 @@ PARAMS = {
             'encoder_trainer': {
                 'batch_size': 16,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
-                'loss': {'embedding_kl': 0.001, 'use_zsim': True}
+                'loss': {'embedding_kl': 0.05, 'use_zsim': True}
                 },
             'run': {
                 'gan_steps': 200,
@@ -278,5 +278,51 @@ PARAMS = {
 
 
 PARAMS['rockps'] = {'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])}
+PARAMS['rockps']['gmmgan']['model'] = {
+    'embedding_size': 64,
+    'embedding': {'n_components': 20, 'min_scale_p': 0.1},
+    'encoder': {
+        'units': [32, 64, 64, 64],
+        'kernels': 3,
+        'strides': 1,
+        'pooling': 2},
+    'generator': {
+        'init_shape': (4, 4, 512),
+        'units': [512, 512, 512, 256, 128],
+        'outputs': 3,
+        'kernels': 3,
+        'strides': 2},
+    'discriminator': {
+        'units': [128, 256, 512, 512, 512],
+        'kernels': 3,
+        'strides': 2,
+        'dropout': None}
+    }
 
+# python3 gmmgan_test.py --n_steps=100 --n_steps_save=5 --gpu=7 --dataset="cats_vs_dogs"
 PARAMS['cats_vs_dogs'] = {'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])}
+PARAMS['cats_vs_dogs']['gmmgan']['encoder_trainer'] = {
+    'batch_size': 16,
+    'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+    'loss': {'embedding_kl': 0.1, 'use_zsim': True}
+    }
+PARAMS['cats_vs_dogs']['gmmgan']['model'] = {
+    'embedding_size': 128,
+    'embedding': {'n_components': 20, 'min_scale_p': 0.1},
+    'encoder': {
+        'units': [32, 64, 64, 128],
+        'kernels': 3,
+        'strides': 1,
+        'pooling': 2},
+    'generator': {
+        'init_shape': (4, 4, 512),
+        'units': [512, 512, 512, 256, 128],
+        'outputs': 3,
+        'kernels': 3,
+        'strides': 2},
+    'discriminator': {
+        'units': [128, 256, 512, 512, 512],
+        'kernels': 3,
+        'strides': 2,
+        'dropout': None}
+    }
