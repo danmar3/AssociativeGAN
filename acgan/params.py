@@ -331,3 +331,26 @@ PARAMS['cats_vs_dogs']['gmmgan']['model'] = {
 # python3 gmmgan_test.py --n_steps=100 --n_steps_save=5 --gpu=7 --dataset="stanford_dogs"
 PARAMS['stanford_dogs'] = {
     'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])}
+
+PARAMS['cifar10'] = {
+    'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])}
+PARAMS['cifar10']['gmmgan']['model'] = {
+    'embedding_size': 64,
+    'embedding': {'n_components': 20, 'min_scale_p': 0.1},
+    'encoder': {
+        'units': [32, 64, 64, 128],
+        'kernels': 3,
+        'strides': 1,
+        'pooling': 2},
+    'generator': {
+        'init_shape': (4, 4, 512),
+        'units': [512, 512, 256],
+        'outputs': 3,
+        'kernels': 3,
+        'strides': 2},
+    'discriminator': {
+        'units': [256, 512, 512],
+        'kernels': 3,
+        'strides': 2,
+        'dropout': None}
+    }

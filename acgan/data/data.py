@@ -184,6 +184,20 @@ def load_stanford_dogs(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
+def load_cifar10(batch_size, split=tfds.Split.TRAIN):
+    def map_fn(batch):
+        batch = tf.cast(batch['image'], tf.float32)
+        batch = (batch-127.5)/127.5
+        return batch
+
+    dataset, info = tfds.load(
+        'cifar10', split=tfds.Split.TRAIN, with_info=True)
+    dataset = dataset.shuffle(1000).repeat()\
+                     .batch(batch_size)\
+                     .map(map_fn)\
+                     .prefetch(tf.data.experimental.AUTOTUNE)
+
+
 def load(name, batch_size):
     def load_imagenet(batch_size, resolution):
         return imagenet2012.load_imagenet2012(
@@ -201,6 +215,7 @@ def load(name, batch_size):
         lambda batch_size: load_imagenet(batch_size, 128),
         'rockps': load_rockps,
         'cats_vs_dogs': load_cats_vs_dogs,
-        'stanford_dogs': load_stanford_dogs
+        'stanford_dogs': load_stanford_dogs,
+        'cifar10': load_cifar10
     }
     return loaders[name](batch_size)
