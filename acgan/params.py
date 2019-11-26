@@ -326,3 +326,8 @@ PARAMS['cats_vs_dogs']['gmmgan']['model'] = {
         'strides': 2,
         'dropout': None}
     }
+
+
+# python3 gmmgan_test.py --n_steps=100 --n_steps_save=5 --gpu=7 --dataset="stanford_dogs"
+PARAMS['stanford_dogs'] = {
+    'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])}

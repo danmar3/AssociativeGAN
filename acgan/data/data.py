@@ -146,6 +146,44 @@ def load_cats_vs_dogs(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
+def load_stanford_dogs(batch_size, split=tfds.Split.TRAIN):
+    '''load cropped stanford dogs'''
+    def filter_fn(batch):
+        shape = tf.cast(tf.shape(batch['image']), tf.float32)
+        min_val = tf.math.minimum(shape[0], shape[1])
+        max_val = tf.math.maximum(shape[0], shape[1])
+        return (max_val/min_val) < 1.5
+
+    def map_fn(batch):
+        def crop(image, bbox):
+            return tf.image.crop_to_bounding_box(
+                image=image,
+                offset_height=tf.cast(shape[0]*bbox[0], tf.int32),
+                offset_width=tf.cast(shape[1]*bbox[1], tf.int32),
+                target_height=tf.cast(shape[0]*(bbox[2]-bbox[0]), tf.int32),
+                target_width=tf.cast(shape[1]*(bbox[3]-bbox[1]), tf.int32))
+        bbox = batch['objects']['bbox']
+        shape = tf.cast(tf.shape(batch['image']), tf.float32)
+        image = tf.cast(batch['image'], tf.float32)
+        image = crop(image, bbox[0, ...])
+        # reshape
+        image = tf.image.resize_bilinear(
+            image[tf.newaxis, ...],
+            size=(128, 128),
+            align_corners=False)
+        # normalize
+        image = (image-127.5)/127.5
+        return image[0, ...]
+
+    dataset, info = tfds.load(
+        'my_stanford_dogs', split=tfds.Split.TRAIN, with_info=True)
+    dataset = dataset.filter(filter_fn).shuffle(1000).repeat()\
+                     .map(map_fn)\
+                     .batch(batch_size)\
+                     .prefetch(tf.data.experimental.AUTOTUNE)
+    return dataset
+
+
 def load(name, batch_size):
     def load_imagenet(batch_size, resolution):
         return imagenet2012.load_imagenet2012(
@@ -162,6 +200,7 @@ def load(name, batch_size):
         'imagenet_128':
         lambda batch_size: load_imagenet(batch_size, 128),
         'rockps': load_rockps,
-        'cats_vs_dogs': load_cats_vs_dogs
+        'cats_vs_dogs': load_cats_vs_dogs,
+        'stanford_dogs': load_stanford_dogs
     }
     return loaders[name](batch_size)

@@ -63,7 +63,7 @@ _ANNOTATIONS_URL = "http://vision.stanford.edu/aditya86/ImageNetDogs/annotation.
 _NAME_RE = re.compile(r"([\w-]*/)*([\w]*.jpg)$")
 
 
-class StanfordDogs(tfds.core.GeneratorBasedBuilder):
+class MyStanfordDogs(tfds.core.GeneratorBasedBuilder):
   """Stanford Dogs dataset."""
 
   # Version 0.2.0: Fix non-deterministic label names
@@ -89,7 +89,7 @@ class StanfordDogs(tfds.core.GeneratorBasedBuilder):
                 }),
         }),
         supervised_keys=("image", "label"),
-        homepage=_URL,
+        urls=[_URL],
         citation=_CITATION)
 
   def _split_generators(self, dl_manager):
