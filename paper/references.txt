@@ -31,3 +31,12 @@ https://openreview.net/pdf?id=SJx9GQb0-
 
 Gaussian Mixture Generative Adversarial Networks for Diverse Datasets, and the Unsupervised Clustering of Images
 https://arxiv.org/pdf/1808.10356.pdf
+
+* ClusterGAN : Latent Space Clustering in Generative Adversarial Networks
+https://arxiv.org/pdf/1809.03627.pdf
+
+* GAN-BASED GAUSSIAN MIXTURE MODEL RESPONSIBILITY LEARNING
+https://openreview.net/pdf?id=HJgEe1SKPr
+
+* Gaussian Mixture Generative Adversarial Networks for Diverse Datasets, and the Unsupervised Clustering of Images
+https://arxiv.org/pdf/1808.10356.pdf
