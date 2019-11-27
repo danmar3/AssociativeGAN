@@ -87,7 +87,7 @@ class GmmEncoderTrainer(BaseTrainer):
                 -zpred.log_prob(z)))
 
     def _loss_embedding(self, zsim, zreal, embedding_kl=None,
-                        use_zsim=True):
+                        use_zsim=True, comp_loss='kl'):
         '''loss of the marginal embedding p(z).'''
         # negative likelihood
         if use_zsim:
@@ -101,16 +101,25 @@ class GmmEncoderTrainer(BaseTrainer):
             cat = embedding.dist.cat
             n_comp = embedding.n_components
             cat_ref = tfp.distributions.Categorical(logits=n_comp*[1.0])
-            kl_loss = tfp.distributions.kl_divergence(cat, cat_ref)
-            loss = tf.reduce_mean(loss) + embedding_kl*kl_loss
+            cat_loss = tfp.distributions.kl_divergence(cat, cat_ref)
+            loss = tf.reduce_mean(loss) + embedding_kl*cat_loss
             # Gaussian means
-            normal_ref = tfp.distributions.MultivariateNormalDiag(
-                    loc=tf.zeros([embedding.n_dims]),
-                    scale_diag=tf.ones([embedding.n_dims]))
-            loc_batch = tf.stack([comp.loc for comp in embedding.components],
-                                 axis=0)
-            mean_loss = -normal_ref.log_prob(loc_batch)
-            loss = loss + embedding_kl * tf.reduce_mean(mean_loss)
+            if comp_loss == 'log_prob':
+                # check and remove if necessary
+                normal_ref = tfp.distributions.MultivariateNormalDiag(
+                        loc=tf.zeros([embedding.n_dims]),
+                        scale_diag=tf.ones([embedding.n_dims]))
+                loc_batch = tf.stack([comp.loc for comp in embedding.components],
+                                     axis=0)
+                mean_loss = -normal_ref.log_prob(loc_batch)
+                loss = loss + embedding_kl * tf.reduce_mean(mean_loss)
+            elif comp_loss == 'kl':
+                normal_ref = tfp.distributions.MultivariateNormalDiag(
+                        loc=tf.zeros([embedding.n_dims]),
+                        scale_diag=tf.ones([embedding.n_dims]))
+                comp_loss = [tfp.distributions.kl_divergence(comp, normal_ref)
+                             for comp in embedding.dist.components]
+                loss = loss + embedding_kl * tf.add_n(comp_loss)
         # return
         return loss
 

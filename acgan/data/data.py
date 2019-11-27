@@ -196,6 +196,7 @@ def load_cifar10(batch_size, split=tfds.Split.TRAIN):
                      .batch(batch_size)\
                      .map(map_fn)\
                      .prefetch(tf.data.experimental.AUTOTUNE)
+    return dataset
 
 
 def load(name, batch_size):

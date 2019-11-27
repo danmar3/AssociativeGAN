@@ -11,6 +11,11 @@ class GMM(tdl.core.layers.Layer):
     n_components = tdl.core.InputArgument.required(
          'n_components', doc='number of mixture components')
 
+    def get_max_scale(self):
+        tdl.core.assert_initialized(
+            self, 'components', ['n_components', 'n_dims'])
+        return np.power(1.0/self.n_components, 1.0/np.prod(self.n_dims))
+
     @tdl.core.SubmodelInit(lazzy=True)
     def components(self,
                    init_loc=1e-5, init_scale=1.0,
@@ -18,7 +23,7 @@ class GMM(tdl.core.layers.Layer):
                    min_scale_p=None):
         tdl.core.assert_initialized(
             self, 'components', ['n_components', 'n_dims'])
-        max_scale = np.power(1.0/self.n_components, 1.0/np.prod(self.n_dims))
+        max_scale = self.get_max_scale()
         if min_scale_p:
             min_scale = tolerance + min_scale_p*max_scale
         else:
