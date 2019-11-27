@@ -149,12 +149,12 @@ def load_cats_vs_dogs(batch_size, split=tfds.Split.TRAIN):
 def load_stanford_dogs(batch_size, split=tfds.Split.TRAIN):
     '''load cropped stanford dogs'''
     def filter_fn(batch):
-        shape = tf.cast(tf.shape(batch['image']), tf.float32)
+        shape = tf.cast(tf.shape(batch), tf.float32)
         min_val = tf.math.minimum(shape[0], shape[1])
         max_val = tf.math.maximum(shape[0], shape[1])
         return (max_val/min_val) < 1.5
 
-    def map_fn(batch):
+    def map_crop(batch):
         def crop(image, bbox):
             return tf.image.crop_to_bounding_box(
                 image=image,
@@ -166,9 +166,12 @@ def load_stanford_dogs(batch_size, split=tfds.Split.TRAIN):
         shape = tf.cast(tf.shape(batch['image']), tf.float32)
         image = tf.cast(batch['image'], tf.float32)
         image = crop(image, bbox[0, ...])
+        return image
+
+    def map_resize(batch):
         # reshape
         image = tf.image.resize_bilinear(
-            image[tf.newaxis, ...],
+            batch[tf.newaxis, ...],
             size=(128, 128),
             align_corners=False)
         # normalize
@@ -177,8 +180,8 @@ def load_stanford_dogs(batch_size, split=tfds.Split.TRAIN):
 
     dataset, info = tfds.load(
         'my_stanford_dogs', split=tfds.Split.TRAIN, with_info=True)
-    dataset = dataset.filter(filter_fn).shuffle(1000).repeat()\
-                     .map(map_fn)\
+    dataset = dataset.shuffle(1000).repeat()\
+                     .map(map_crop).filter(filter_fn).map(map_resize)\
                      .batch(batch_size)\
                      .prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
