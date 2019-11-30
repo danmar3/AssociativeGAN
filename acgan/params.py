@@ -97,13 +97,15 @@ PARAMS = {
             'encoder_trainer': {
                 'batch_size': 16,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
-                'loss': {'embedding_kl': 0.05, 'use_zsim': True}
+                'loss': {'embedding_kl': 0.05, 'use_zsim': True,
+                         'comp_loss': 'kl2'}
                 },
             'run': {
                 'gan_steps': 200,
                 'encoder_steps': 200,
-                'embedding_steps': 20,
-                'homogenize': True}
+                'embedding_steps': 50,
+                'homogenize': False,
+                'reset_embedding': 5}
             }
         },
     'celeb_a_hd_512': {
@@ -331,14 +333,43 @@ PARAMS['cats_vs_dogs']['gmmgan']['model'] = {
 # python3 gmmgan_test.py --n_steps=100 --n_steps_save=5 --gpu=7 --dataset="stanford_dogs"
 PARAMS['stanford_dogs'] = {
     'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])}
+PARAMS['stanford_dogs']['gmmgan']['model'] = {
+    'embedding_size': 128,
+    'embedding': {'n_components': 100, 'min_scale_p': 0.1},
+    'encoder': {
+        'units': [32, 64, 64, 64],
+        'kernels': 3,
+        'strides': 1,
+        'pooling': 2},
+    'generator': {
+        'init_shape': (4, 4, 512),
+        'units': [512, 512, 512, 256, 128],
+        'outputs': 3,
+        'kernels': 3,
+        'strides': 2},
+    'discriminator': {
+        'units': [128, 256, 512, 512, 512],
+        'kernels': 3,
+        'strides': 2,
+        'dropout': None}
+    }
+PARAMS['stanford_dogs']['gmmgan']['run'] = {
+    'gan_steps': 200,
+    'encoder_steps': 200,
+    'embedding_steps': 50,
+    'homogenize': False,
+    'reset_embedding': 5
+    }
+
 
 PARAMS['cifar10'] = {
-    'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])}
+    'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])
+    }
 PARAMS['cifar10']['gmmgan']['model'] = {
     'embedding_size': 64,
-    'embedding': {'n_components': 20, 'min_scale_p': 0.1},
+    'embedding': {'n_components': 100, 'min_scale_p': 0.1},
     'encoder': {
-        'units': [32, 64, 64, 128],
+        'units': [32, 64, 64],
         'kernels': 3,
         'strides': 1,
         'pooling': 2},
@@ -353,4 +384,17 @@ PARAMS['cifar10']['gmmgan']['model'] = {
         'kernels': 3,
         'strides': 2,
         'dropout': None}
+    }
+PARAMS['cifar10']['gmmgan']['encoder_trainer'] = {
+    'batch_size': 16,
+    'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+    'loss': {'embedding_kl': 0.01, 'use_zsim': True,
+             'comp_loss': 'kl2'}
+    }
+PARAMS['cifar10']['gmmgan']['run'] = {
+    'gan_steps': 200,
+    'encoder_steps': 200,
+    'embedding_steps': 50,
+    'homogenize': False,
+    'reset_embedding': 5
     }

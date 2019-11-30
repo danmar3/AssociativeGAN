@@ -138,15 +138,20 @@ class ExperimentGMM(object):
     def run(self, n_steps=100, **kwargs):
         if not kwargs:
             kwargs = self.params['run']
-        for trial in tqdm.tqdm(range(n_steps)):
-            # Train GAN
+        if 'homogenize' not in kwargs:
+            kwargs['homogenize'] = False
+        if 'reset_embedding' not in kwargs:
+            kwargs['reset_embedding'] = False
+        if not hasattr(self, '_global_steps'):
+            self._global_steps = 0
+
+        def train_gan():
             if kwargs['homogenize']:
                 logits_h = self.model.embedding.logits
                 _logits = logits_h.value().eval()
                 logits = np.zeros(logits_h.shape.as_list(),
                                   dtype=logits_h.dtype.as_numpy_dtype)
                 self._set_logits(logits=logits)
-
             if not run_training(
                     dis=self.trainer.dis, gen=self.trainer.gen,
                     n_steps=kwargs['gan_steps'], n_logging=10,
@@ -154,12 +159,29 @@ class ExperimentGMM(object):
                 return False
             if kwargs['homogenize']:
                 self._set_logits(logits=_logits)
-            # Train encoder
+            return True
+
+        def train_encoder():
             for i in tqdm.tqdm(range(kwargs['encoder_steps'])):
                 self.session.run(self.trainer.enc.step['encoder'])
-            # Train embedding
-            for i in tqdm.tqdm(range(kwargs['embedding_steps'])):
+
+        def train_embedding():
+            _n_steps = kwargs['embedding_steps']
+            if kwargs['reset_embedding'] is not False:
+                if self._global_steps % kwargs['reset_embedding'] == 0:
+                    self.session.run(self.model.embedding.init_op)
+                    _n_steps = kwargs['reset_embedding']*_n_steps
+            for i in tqdm.tqdm(range(_n_steps)):
                 self.session.run(self.trainer.enc.step['embedding'])
+
+        if not train_gan():
+            return False
+        for trial in tqdm.tqdm(range(n_steps)):
+            train_encoder()
+            train_embedding()
+            if not train_gan():
+                return False
+            self._global_steps = self._global_steps + 1
         return True
 
     @eager_function

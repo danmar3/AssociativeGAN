@@ -41,6 +41,15 @@ class GmmDiscriminatorTrainer(MSG_DiscriminatorTrainer):
         return loss
 
 
+def scale_loss(comp, ref):
+    loss_tr = ref.scale.solve(comp.scale.to_dense())
+    # frobenius
+    loss_tr = 0.5*tf.reduce_sum(tf.square(loss_tr), axis=[-2, -1])
+    loss_det = (ref.scale.log_abs_determinant()
+                - comp.scale.log_abs_determinant())
+    return loss_tr + loss_det
+
+
 class GmmEncoderTrainer(BaseTrainer):
     @tdl.core.SubmodelInit
     def optimizer(self, learning_rate, beta1=0.0):
@@ -87,7 +96,7 @@ class GmmEncoderTrainer(BaseTrainer):
                 -zpred.log_prob(z)))
 
     def _loss_embedding(self, zsim, zreal, embedding_kl=None,
-                        use_zsim=True, comp_loss='kl'):
+                        use_zsim=True, comp_loss='kl2'):
         '''loss of the marginal embedding p(z).'''
         # negative likelihood
         if use_zsim:
@@ -120,11 +129,31 @@ class GmmEncoderTrainer(BaseTrainer):
                 comp_loss = [tfp.distributions.kl_divergence(comp, normal_ref)
                              for comp in embedding.dist.components]
                 loss = loss + embedding_kl * tf.add_n(comp_loss)
-        # return
+            elif comp_loss == 'kl2':
+                ref_loc = tfp.distributions.MultivariateNormalDiag(
+                    loc=tf.zeros([embedding.n_dims]),
+                    scale_diag=tf.ones([embedding.n_dims]))
+                loc_batch = tf.stack([comp.loc for comp in embedding.components],
+                                     axis=0)
+                loc_loss = -ref_loc.log_prob(loc_batch)
+                loss = loss + embedding_kl * tf.reduce_mean(loc_loss)
+
+                ref_scale = tfp.distributions.MultivariateNormalDiag(
+                    loc=tf.zeros([embedding.n_dims]),
+                    scale_diag=tf.constant(
+                        value=embedding.get_max_scale(),
+                        shape=[embedding.n_dims],
+                        dtype=tf.float32))
+                comp_loss = [scale_loss(comp, ref_scale)
+                             for comp in embedding.dist.components]
+                loss = loss + embedding_kl * tf.add_n(comp_loss)
+            else:
+                raise ValueError('comp loss type {} not valid.'
+                                 ''.format(comp_loss))
         return loss
 
     @tdl.core.SubmodelInit
-    def loss(self, embedding_kl=None, use_zsim=True):
+    def loss(self, embedding_kl=None, use_zsim=True, comp_loss='kl'):
         tdl.core.assert_initialized(self, 'loss', ['embedding', 'encoded'])
         return {'encoder':
                 self._loss_encoder(self.embedding, self.encoded['xsim']),
@@ -133,7 +162,8 @@ class GmmEncoderTrainer(BaseTrainer):
                     zsim=self.encoded['xsim'],
                     zreal=self.encoded['xreal'],
                     embedding_kl=embedding_kl,
-                    use_zsim=use_zsim)}
+                    use_zsim=use_zsim,
+                    comp_loss=comp_loss)}
 
     @tdl.core.OutputValue
     def step(self, _):

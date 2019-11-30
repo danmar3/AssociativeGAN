@@ -57,6 +57,14 @@ class GMM(tdl.core.layers.Layer):
                 for comp in self.components])
         return bimix_gauss
 
+    @tdl.core.SubmodelInit(lazzy=True)
+    def init_op(self):
+        tdl.core.assert_initialized(self, 'dist', ['components', 'logits'])
+        # update variables as building has not finished
+        self._update_variables()
+        return tf.group([var.initializer for var in
+                         tdl.core.get_trainable(self)])
+
     @tdl.core.layers.build_wrapper
     def sample(self, sample_shape):
         return self.dist.sample(sample_shape)

@@ -23,10 +23,16 @@ def main():
                         help=("number of steps to run"))
     parser.add_argument('--n_steps_save', default=10,
                         help=("number of steps to run before save"))
-    parser.add_argument('--gpu', default=0, help='gpu to use')
-    parser.add_argument('--dataset', default='celeb_a', help='dataset to use')
-    parser.add_argument('--model', default='gmmgan', help='model to test')
-    parser.add_argument('--datadir', default=None, help='datasets path')
+    parser.add_argument('--gpu', default=0,
+                        help='gpu to use')
+    parser.add_argument('--cpu', default=False, action='store_true',
+                        help='use cpu only')
+    parser.add_argument('--dataset', default='celeb_a',
+                        help='dataset to use')
+    parser.add_argument('--model', default='gmmgan',
+                        help='model to test')
+    parser.add_argument('--datadir', default=None,
+                        help='datasets path')
     parser.add_argument('--clean', default=False, action='store_true',
                         help='clearn directory before start')
     parser.add_argument(
@@ -34,7 +40,11 @@ def main():
         help='indicator printed during logging to identify the experiment')
 
     FLAGS = parser.parse_args()
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu)
+    if FLAGS.cpu:
+        print("USING CPU ONLY !!!!")
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu)
     acgan.data.set_datadir(FLAGS.datadir)
     # cleanup
     assert FLAGS.model == 'gmmgan', \
