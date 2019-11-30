@@ -366,7 +366,7 @@ PARAMS['cifar10'] = {
     'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])
     }
 PARAMS['cifar10']['gmmgan']['model'] = {
-    'embedding_size': 64,
+    'embedding_size': 128,
     'embedding': {'n_components': 100, 'min_scale_p': 0.1},
     'encoder': {
         'units': [32, 64, 64],

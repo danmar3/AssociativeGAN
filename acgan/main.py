@@ -70,10 +70,11 @@ class ExperimentGMM(object):
 
         # init output_dir
         now = datetime.datetime.now()
-        self.output_dir = 'tmp/{}/session_{}{:02d}{:02d}:{:02d}{:02d}'.format(
-            self.name,
-            now.year, now.month, now.day, now.hour, now.minute
-            )
+        self.output_dir = 'tmp/{}/session_{}{:02d}{:02d}_{:02d}{:02d}_{}'\
+            ''.format(self.name,
+                      now.year, now.month, now.day, now.hour, now.minute,
+                      self.indicator
+                      )
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
@@ -169,13 +170,17 @@ class ExperimentGMM(object):
             _n_steps = kwargs['embedding_steps']
             if kwargs['reset_embedding'] is not False:
                 if self._global_steps % kwargs['reset_embedding'] == 0:
+                    print('--> Resetting embedding.')
                     self.session.run(self.model.embedding.init_op)
                     _n_steps = kwargs['reset_embedding']*_n_steps
             for i in tqdm.tqdm(range(_n_steps)):
                 self.session.run(self.trainer.enc.step['embedding'])
 
-        if not train_gan():
-            return False
+        # warm up trainin the gan
+        if self._global_steps == 0:
+            if not train_gan():
+                return False
+        # train for n_steps trials
         for trial in tqdm.tqdm(range(n_steps)):
             train_encoder()
             train_embedding()
@@ -280,7 +285,7 @@ class ExperimentGMM(object):
             if not os.path.exists(folder):
                 os.makedirs(folder)
             now = datetime.datetime.now()
-            filename = '{}/generated_{}{:02d}{:02d}:{:02d}{:02d}.pdf'.format(
+            filename = '{}/generated_{}{:02d}{:02d}_{:02d}{:02d}.pdf'.format(
                 folder, now.year, now.month, now.day, now.hour, now.minute)
 
         fig = plt.figure(figsize=(13, 3*13))
@@ -320,7 +325,7 @@ class ExperimentGMM(object):
         if not os.path.exists(folder):
             os.makedirs(folder)
         now = datetime.datetime.now()
-        filename = '{}/vars_{}{:02d}{:02d}:{:02d}{:02d}.ckpt'.format(
+        filename = '{}/vars_{}{:02d}{:02d}_{:02d}{:02d}.ckpt'.format(
             folder,
             now.year, now.month, now.day, now.hour, now.minute)
         self.saver.save(self.session, filename)
