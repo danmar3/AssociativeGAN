@@ -100,7 +100,10 @@ class GmmEncoderTrainer(BaseTrainer):
         '''loss of the marginal embedding p(z).'''
         # negative likelihood
         if use_zsim:
-            z_sample = tf.concat([zsim.sample(), zreal.sample()], axis=0)
+            z_sample = tf.concat(
+                [tf.stop_gradient(zsim.sample()),
+                 tf.stop_gradient(zreal.sample())],
+                axis=0)
         else:
             z_sample = zreal.sample()
         loss = -self.model.embedding.log_prob(z_sample)
