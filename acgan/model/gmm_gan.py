@@ -136,11 +136,20 @@ class GmmEncoderTrainer(BaseTrainer):
                 ref_loc = tfp.distributions.MultivariateNormalDiag(
                     loc=tf.zeros([embedding.n_dims]),
                     scale_diag=tf.ones([embedding.n_dims]))
-                loc_batch = tf.stack([comp.loc for comp in embedding.components],
-                                     axis=0)
+                loc_batch = tf.convert_to_tensor(embedding.components.loc)
                 loc_loss = -ref_loc.log_prob(loc_batch)
                 loss = loss + embedding_kl * tf.reduce_mean(loc_loss)
 
+                ref_scale = tfp.distributions.MultivariateNormalDiag(
+                    loc=tf.zeros([embedding.n_dims]),
+                    scale_diag=tf.constant(
+                        value=embedding.get_max_scale(),
+                        shape=[embedding.n_dims],
+                        dtype=tf.float32))
+                comp_loss = [scale_loss(comp, ref_scale)
+                             for comp in embedding.dist.components]
+                loss = loss + embedding_kl * tf.add_n(comp_loss)
+            elif comp_loss == 'kl3':
                 ref_scale = tfp.distributions.MultivariateNormalDiag(
                     loc=tf.zeros([embedding.n_dims]),
                     scale_diag=tf.constant(
@@ -248,7 +257,7 @@ class GmmGan(MSG_GAN):
 
     @tdl.core.SubmodelInit
     def embedding(self, n_components, init_loc=1e-5, init_scale=1.0,
-                  min_scale_p=None):
+                  min_scale_p=None, constrained_loc=False):
         '''Embedding model P(z)
 
         Args:
@@ -262,7 +271,8 @@ class GmmGan(MSG_GAN):
             n_dims=self.embedding_size,
             n_components=n_components,
             components={'init_loc': init_loc,
-                        'init_scale': init_scale})
+                        'init_scale': init_scale,
+                        'constrained_loc': constrained_loc})
         return model
 
     @tdl.core.SubmodelInit

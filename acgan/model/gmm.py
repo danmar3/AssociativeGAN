@@ -20,7 +20,8 @@ class GMM(tdl.core.layers.Layer):
     def components(self,
                    init_loc=1e-5, init_scale=1.0,
                    trainable=True, tolerance=1e-5,
-                   min_scale_p=None):
+                   min_scale_p=None,
+                   constrained_loc=False):
         tdl.core.assert_initialized(
             self, 'components', ['n_components', 'n_dims'])
         max_scale = self.get_max_scale()
@@ -28,16 +29,34 @@ class GMM(tdl.core.layers.Layer):
             min_scale = tolerance + min_scale_p*max_scale
         else:
             min_scale = tolerance
-        components = [
-            tdl.core.SimpleNamespace(
-              loc=tf.Variable(
-                  tf.truncated_normal(shape=[self.n_dims], mean=init_loc),
-                  trainable=trainable),
-              scale=tdl.constrained.ConstrainedVariable(
-                  0.9*max_scale*tf.ones([self.n_dims]),
-                  min=min_scale,
-                  max=max_scale))
-            for k in range(self.n_components)]
+
+        def batch_norm(x):
+            return tf.sqrt(tf.reduce_sum(tf.square(x), axis=-1))[
+                ..., tf.newaxis]
+        if constrained_loc:
+            loc = tf.Variable(
+                  tf.truncated_normal(
+                      shape=[self.n_components, self.n_dims],
+                      mean=init_loc),
+                  constraint=lambda weights: tf.where(
+                      tf.broadcast_to(batch_norm(weights) > 1.0,
+                                      [self.n_components, self.n_dims]),
+                      x=weights/batch_norm(weights),
+                      y=weights
+                  ),
+                  trainable=trainable)
+        else:
+            loc = tf.Variable(
+                  tf.truncated_normal(
+                      shape=[self.n_components, self.n_dims],
+                      mean=init_loc),
+                  trainable=trainable)
+        components = tdl.core.SimpleNamespace(
+            loc=loc,
+            scale=tdl.constrained.ConstrainedVariable(
+                0.9*max_scale*tf.ones([self.n_components, self.n_dims]),
+                min=min_scale,
+                max=max_scale))
         return components
 
     @tdl.core.SubmodelInit(lazzy=True)
@@ -53,8 +72,11 @@ class GMM(tdl.core.layers.Layer):
             cat=tfp.distributions.Categorical(logits=self.logits),
             components=[
                 tfp.distributions.MultivariateNormalDiag(
-                    loc=comp.loc, scale_diag=tf.convert_to_tensor(comp.scale))
-                for comp in self.components])
+                    loc=tf.convert_to_tensor(
+                        self.components.loc)[idx, ...],
+                    scale_diag=tf.convert_to_tensor(
+                        self.components.scale)[idx, ...])
+                for idx in range(self.n_components)])
         return bimix_gauss
 
     @tdl.core.SubmodelInit(lazzy=True)

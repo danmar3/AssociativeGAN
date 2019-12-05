@@ -335,7 +335,7 @@ PARAMS['stanford_dogs'] = {
     'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])}
 PARAMS['stanford_dogs']['gmmgan']['model'] = {
     'embedding_size': 128,
-    'embedding': {'n_components': 100, 'min_scale_p': 0.1},
+    'embedding': {'n_components': 50, 'min_scale_p': 0.1},
     'encoder': {
         'units': [32, 64, 64, 64],
         'kernels': 3,
@@ -357,7 +357,7 @@ PARAMS['stanford_dogs']['gmmgan']['run'] = {
     'gan_steps': 200,
     'encoder_steps': 200,
     'embedding_steps': 50,
-    'homogenize': False,
+    'homogenize': True,
     'reset_embedding': 5
     }
 
@@ -367,7 +367,8 @@ PARAMS['cifar10'] = {
     }
 PARAMS['cifar10']['gmmgan']['model'] = {
     'embedding_size': 128,
-    'embedding': {'n_components': 100, 'min_scale_p': 0.1},
+    'embedding': {'n_components': 100, 'min_scale_p': 0.1,
+                  'constrained_loc': True},
     'encoder': {
         'units': [32, 64, 64],
         'kernels': 3,
@@ -389,12 +390,12 @@ PARAMS['cifar10']['gmmgan']['encoder_trainer'] = {
     'batch_size': 16,
     'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
     'loss': {'embedding_kl': 0.01, 'use_zsim': True,
-             'comp_loss': 'kl2'}
+             'comp_loss': 'kl3'}
     }
 PARAMS['cifar10']['gmmgan']['run'] = {
     'gan_steps': 200,
     'encoder_steps': 200,
     'embedding_steps': 50,
-    'homogenize': False,
+    'homogenize': True,
     'reset_embedding': 5
     }
