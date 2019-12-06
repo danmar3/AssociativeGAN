@@ -1,5 +1,7 @@
 import os
+import time
 import tqdm
+import GPUtil
 import argparse
 import acgan
 import json
@@ -23,7 +25,7 @@ def main():
                         help=("number of steps to run"))
     parser.add_argument('--n_steps_save', default=10,
                         help=("number of steps to run before save"))
-    parser.add_argument('--gpu', default=0,
+    parser.add_argument('--gpu', default=None,
                         help='gpu to use')
     parser.add_argument('--cpu', default=False, action='store_true',
                         help='use cpu only')
@@ -43,7 +45,21 @@ def main():
     if FLAGS.cpu:
         print("USING CPU ONLY !!!!")
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    elif FLAGS.gpu is None:
+        gpu_ids = GPUtil.getAvailable(maxLoad=0.1, maxMemory=0.1, limit=1)
+        while not gpu_ids:
+            gpu_ids = GPUtil.getAvailable(maxLoad=0.1, maxMemory=0.1, limit=1)
+            print('GPUs are busy, waiting...')
+            time.sleep(30)
+        print('\n\n---> Using GPU: {} \n\n'.format(gpu_ids[0]))
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_ids[0])
     else:
+        gpu_ids = GPUtil.getAvailable(maxLoad=0.1, maxMemory=0.1, limit=10)
+        while int(FLAGS.gpu) not in gpu_ids:
+            gpu_ids = GPUtil.getAvailable(maxLoad=0.1, maxMemory=0.1, limit=10)
+            print('GPU is busy, waiting...')
+            time.sleep(30)
+        print('\n\n---> Using GPU: {} \n\n'.format(FLAGS.gpu))
         os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu)
     acgan.data.set_datadir(FLAGS.datadir)
     # cleanup
