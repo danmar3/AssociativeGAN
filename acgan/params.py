@@ -374,7 +374,7 @@ PARAMS['cifar10'] = {
     }
 PARAMS['cifar10']['gmmgan']['model'] = {
     'embedding_size': 128,
-    'embedding': {'n_components': 100, 'min_scale_p': 0.1,
+    'embedding': {'n_components': 50, 'min_scale_p': 0.1,
                   'constrained_loc': True},
     'encoder': {
         'units': [32, 64, 64],
@@ -397,7 +397,7 @@ PARAMS['cifar10']['gmmgan']['encoder_trainer'] = {
     'batch_size': 16,
     'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
     'loss': {'embedding_kl': 0.01, 'use_zsim': True,
-             'comp_loss': 'kl3'}
+             'comp_loss': 'kl4'}
     }
 PARAMS['cifar10']['gmmgan']['run'] = {
     'gan_steps': 200,

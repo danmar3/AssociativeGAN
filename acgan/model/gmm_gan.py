@@ -55,7 +55,8 @@ class GmmEncoderTrainer(BaseTrainer):
     def optimizer(self, learning_rate, beta1=0.0):
         return {
             'encoder': tf.train.AdamOptimizer(learning_rate, beta1=beta1),
-            'embedding': tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+            'embedding': tf.train.AdamOptimizer(learning_rate),
+            'linear_disc': tf.train.AdamOptimizer(learning_rate),
             }
 
     @tdl.core.InputArgument
@@ -159,9 +160,37 @@ class GmmEncoderTrainer(BaseTrainer):
                 comp_loss = [scale_loss(comp, ref_scale)
                              for comp in embedding.dist.components]
                 loss = loss + embedding_kl * tf.add_n(comp_loss)
+            elif comp_loss == 'kl4':
+                sparse_loss = self._loss_linear_disc()
+                sparsity = tf.placeholder(tf.float32, shape=())
+                loss = loss + sparsity * embedding_kl * sparse_loss
+
+                ref_scale = tfp.distributions.MultivariateNormalDiag(
+                    loc=tf.zeros([embedding.n_dims]),
+                    scale_diag=tf.constant(
+                        value=embedding.get_max_scale(),
+                        shape=[embedding.n_dims],
+                        dtype=tf.float32))
+                comp_loss = [scale_loss(comp, ref_scale)
+                             for comp in embedding.dist.components]
+                loss = loss + embedding_kl * tf.add_n(comp_loss)
+                loss = tdl.core.SimpleNamespace(value=loss, sparsity=sparsity)
             else:
                 raise ValueError('comp loss type {} not valid.'
                                  ''.format(comp_loss))
+        return loss
+
+    def _loss_linear_disc(self):
+        embedding = self.model.embedding
+        samp = tf.stack([comp.sample() for comp in embedding.dist.components],
+                        axis=0)
+        labels = tf.one_hot(list(range(embedding.n_components)),
+                            depth=embedding.n_components)
+        loss = tf.keras.losses.categorical_crossentropy(
+            y_true=labels,
+            y_pred=self.model.linear_disc(samp),
+            from_logits=True
+        )
         return loss
 
     @tdl.core.SubmodelInit
@@ -175,7 +204,8 @@ class GmmEncoderTrainer(BaseTrainer):
                     zreal=self.encoded['xreal'],
                     embedding_kl=embedding_kl,
                     use_zsim=use_zsim,
-                    comp_loss=comp_loss)}
+                    comp_loss=comp_loss),
+                'linear_disc': self._loss_linear_disc()}
 
     @tdl.core.OutputValue
     def step(self, _):
@@ -185,12 +215,16 @@ class GmmEncoderTrainer(BaseTrainer):
             step = {
                 'encoder':
                 self.optimizer['encoder'].minimize(
-                    self.loss['encoder'],
+                    tf.convert_to_tensor(self.loss['encoder']),
                     var_list=tdl.core.get_trainable(self.model.encoder)),
                 'embedding':
                 self.optimizer['embedding'].minimize(
-                    self.loss['embedding'],
+                    tf.convert_to_tensor(self.loss['embedding']),
                     var_list=tdl.core.get_trainable(self.model.embedding)),
+                'linear_disc':
+                self.optimizer['linear_disc'].minimize(
+                    tf.convert_to_tensor(self.loss['linear_disc']),
+                    var_list=tdl.core.get_trainable(self.model.linear_disc))
                 }
         return step
 
@@ -202,7 +236,9 @@ class GmmEncoderTrainer(BaseTrainer):
                 [self.train_step] +
                 tdl.core.get_variables(self.model.encoder) +
                 self.optimizer['embedding'].variables() +
-                tdl.core.get_variables(self.model.embedding))
+                tdl.core.get_variables(self.model.embedding) +
+                self.optimizer['linear_disc'].variables() +
+                tdl.core.get_variables(self.model.linear_disc))
 
 
 class GmmGeneratorTrainer(MSG_GeneratorTrainer):
@@ -274,6 +310,12 @@ class GmmGan(MSG_GAN):
                         'init_scale': init_scale,
                         'constrained_loc': constrained_loc})
         return model
+
+    @tdl.core.Submodel
+    def linear_disc(self, _):
+        tdl.core.assert_initialized(
+            self, 'embedding', ['embedding_size', 'embedding'])
+        return tf_layers.Dense(units=self.embedding.n_components)
 
     @tdl.core.SubmodelInit
     def encoder(self, units, kernels, strides, dropout=None, padding='same',

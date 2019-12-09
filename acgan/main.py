@@ -12,6 +12,7 @@ from .train import run_training
 from .model.gmm_gan import GmmGan
 from twodlearn.core import nest
 import functools
+from sklearn.manifold import TSNE
 
 
 def normalize_image(image):
@@ -144,7 +145,7 @@ class ExperimentGMM(object):
         if 'reset_embedding' not in kwargs:
             kwargs['reset_embedding'] = False
         if 'n_start' not in kwargs:
-            kwargs['n_start'] = 1
+            kwargs['n_start'] = 0
 
         if not hasattr(self, '_global_steps'):
             self._global_steps = 0
@@ -171,13 +172,36 @@ class ExperimentGMM(object):
 
         def train_embedding():
             _n_steps = kwargs['embedding_steps']
+            reset = False
             if kwargs['reset_embedding'] is not False:
                 if self._global_steps % kwargs['reset_embedding'] == 0:
                     print('--> Resetting embedding.')
-                    self.session.run(self.model.embedding.init_op)
                     _n_steps = kwargs['reset_embedding']*_n_steps
-            for i in tqdm.tqdm(range(_n_steps)):
-                self.session.run(self.trainer.enc.step['embedding'])
+                    reset = True
+
+            def get_dict(sparsity):
+                feed_dict = None
+                if isinstance(self.trainer.enc.loss['embedding'],
+                              tdl.core.SimpleNamespace):
+                    feed_dict = {self.trainer.enc.loss['embedding'].sparsity:
+                                 sparsity}
+                return feed_dict
+
+            if reset:
+                self.session.run(self.model.embedding.init_op)
+                feed_dict = get_dict(sparsity=0.0)
+                for i in tqdm.tqdm(range(_n_steps)):
+                    self.session.run(self.trainer.enc.step['embedding'],
+                                     feed_dict=feed_dict)
+                for i in tqdm.tqdm(range(_n_steps)):
+                    self.session.run(self.trainer.enc.step['linear_disc'])
+            else:
+                for i in tqdm.tqdm(range(_n_steps)):
+                    self.session.run(self.trainer.enc.step['linear_disc'])
+                feed_dict = get_dict(sparsity=1.0)
+                for i in tqdm.tqdm(range(_n_steps)):
+                    self.session.run(self.trainer.enc.step['embedding'],
+                                     feed_dict=feed_dict)
 
         # warm up trainin the gan
         if self._global_steps == 0:
@@ -185,7 +209,7 @@ class ExperimentGMM(object):
                 return False
         # train for n_steps trials
         for trial in tqdm.tqdm(range(n_steps)):
-            if self._global_steps > kwargs['n_start']:
+            if self._global_steps >= kwargs['n_start']:
                 train_encoder()
                 train_embedding()
             if not train_gan():
@@ -283,6 +307,13 @@ class ExperimentGMM(object):
                          interpolation='nearest')
             ax[i].axis('off')
 
+    def visualize_manifold(self, ax=None):
+        if ax is None:
+            fig, ax = plt.subplots(1, 1)
+        Z = self.session.run(self.model.embedding.components.loc)
+        Z_embedded = TSNE(n_components=2).fit_transform(Z)
+        ax.scatter(Z_embedded[:, 0], Z_embedded[:, 1])
+
     def visualize(self, save=False, filename=None):
         if filename is None:
             folder = os.path.join(self.output_dir, 'images')
@@ -312,8 +343,11 @@ class ExperimentGMM(object):
         self.visualize_clusters(ax=ax)
 
         ax = reserve_ax(start=20, scale=(2, 10), shape=(1, 1))
+        ax1 = fig.add_subplot(gs[20:22, 0:8])
+        ax2 = fig.add_subplot(gs[20:22, 8:10])
         probs = self.model.embedding.dist.cat.probs.eval()
-        ax[0, 0].bar(x=range(probs.shape[0]), height=probs)
+        ax1.bar(x=range(probs.shape[0]), height=probs)
+        self.visualize_manifold(ax=ax2)
 
         ax = reserve_ax(start=22, scale=(1, 1), shape=(8, 10))
         self.visualize_reconstruction(ax=ax)

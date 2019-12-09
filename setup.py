@@ -8,7 +8,7 @@ from setuptools import setup, find_packages
 #                   pip install dist/project_name.tar.gz
 DEPS = ['tensorflow-probability', 'tensorflow-datasets',
         'pandas', 'matplotlib', 'jupyter', 'scipy',
-        'attrs', 'Pillow', 'GPUtil']
+        'attrs', 'Pillow', 'GPUtil', 'scikit-learn']
 
 DEPS_DEV = ['Sphinx', 'sphinx_rtd_theme']
 
