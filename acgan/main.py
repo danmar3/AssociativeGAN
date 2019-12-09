@@ -143,6 +143,9 @@ class ExperimentGMM(object):
             kwargs['homogenize'] = False
         if 'reset_embedding' not in kwargs:
             kwargs['reset_embedding'] = False
+        if 'n_start' not in kwargs:
+            kwargs['n_start'] = 1
+
         if not hasattr(self, '_global_steps'):
             self._global_steps = 0
 
@@ -182,8 +185,9 @@ class ExperimentGMM(object):
                 return False
         # train for n_steps trials
         for trial in tqdm.tqdm(range(n_steps)):
-            train_encoder()
-            train_embedding()
+            if self._global_steps > kwargs['n_start']:
+                train_encoder()
+                train_embedding()
             if not train_gan():
                 return False
             self._global_steps = self._global_steps + 1
