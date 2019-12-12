@@ -66,6 +66,9 @@ PARAMS = {
                 }
             },
         'gmmgan': {
+            'global': {
+                'USE_BIAS': {'generator': False, 'discriminator': False},
+                'USE_BATCH_NORM': False},
             'model': {
                 'embedding_size': 64,
                 'embedding': {'n_components': 100, 'min_scale_p': 0.1},
@@ -98,7 +101,7 @@ PARAMS = {
                 'batch_size': 16,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
                 'loss': {'embedding_kl': 0.05, 'use_zsim': True,
-                         'comp_loss': 'kl3'}
+                         'comp_loss': 'kl4'}
                 },
             'run': {
                 'gan_steps': 200,
@@ -332,12 +335,17 @@ PARAMS['cats_vs_dogs']['gmmgan']['model'] = {
 
 # python3 gmmgan_test.py --n_steps=100 --n_steps_save=5 --gpu=7 --dataset="stanford_dogs"
 PARAMS['stanford_dogs'] = {
-    'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])}
+    'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])
+    }
+PARAMS['stanford_dogs']['gmmgan']['global']: {
+    'USE_BIAS': {'generator': False, 'discriminator': False},
+    'USE_BATCH_NORM': False
+    }
 PARAMS['stanford_dogs']['gmmgan']['model'] = {
     'embedding_size': 256,
-    'embedding': {'n_components': 100, 'min_scale_p': 0.1},
+    'embedding': {'n_components': 50, 'min_scale_p': 0.1},
     'encoder': {
-        'units': [32, 64, 64, 128],
+        'units': [32, 64, 64, 64],
         'kernels': 3,
         'strides': 1,
         'pooling': 2},
@@ -357,11 +365,11 @@ PARAMS['stanford_dogs']['gmmgan']['encoder_trainer']: {
     'batch_size': 16,
     'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
     'loss': {'embedding_kl': 0.005, 'use_zsim': True,
-             'comp_loss': 'kl3'}
+             'comp_loss': 'kl4'}
     }
 PARAMS['stanford_dogs']['gmmgan']['run'] = {
     'gan_steps': 200,
-    'encoder_steps': 200,
+    'encoder_steps': 500,
     'embedding_steps': 50,
     'homogenize': True,
     'reset_embedding': 5,

@@ -10,7 +10,15 @@ import tensorflow.keras.layers as tf_layers
 
 USE_BIAS = {'generator': True, 'discriminator': True}
 LEAKY_RATE = 0.2
+USE_BATCH_NORM = False
+# GeneratorFeatureNorm = None
 GeneratorFeatureNorm = VectorNormalizer  # tf.keras.layers.BatchNormalization()
+
+
+def set_global(params):
+    global USE_BIAS, USE_BATCH_NORM
+    USE_BIAS.update(params['USE_BIAS'])
+    USE_BATCH_NORM = params['USE_BATCH_NORM']
 
 
 def OutputActivation():
@@ -260,6 +268,8 @@ class MSG_GeneratorHidden(tdl.core.Layer):
             model.add(tf_layers.LeakyReLU(LEAKY_RATE))
         if GeneratorFeatureNorm is not None:
             model.add(GeneratorFeatureNorm())
+        if USE_BATCH_NORM:
+            model.add(tf.keras.layers.BatchNormalization())
         return model
 
     def compute_output_shape(self, input_shape):

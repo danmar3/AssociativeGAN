@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from . import data
 from . import params as acgan_params
 from .train import run_training
+from .model import msg_gan
 from .model.gmm_gan import GmmGan
 from twodlearn.core import nest
 import functools
@@ -58,6 +59,8 @@ class ExperimentGMM(object):
             params = acgan_params.PARAMS[dataset_name][self.name]
         self.params = params
         self.params['indicator'] = self.indicator
+        if 'global' in self.params:
+            msg_gan.set_global(self.params['global'])
         filename = os.path.join(self.output_dir, 'params.json')
         with open(filename, 'w') as file_h:
             json.dump(self.params, file_h)
