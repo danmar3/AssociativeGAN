@@ -409,7 +409,7 @@ PARAMS['cifar10']['gmmgan']['encoder_trainer'] = {
     'batch_size': 16,
     'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
     'loss': {'embedding_kl': 0.01, 'use_zsim': True,
-             'comp_loss': 'kl4'}
+             'comp_loss': 'kl5'}
     }
 PARAMS['cifar10']['gmmgan']['run'] = {
     'gan_steps': 200,

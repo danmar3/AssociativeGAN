@@ -65,6 +65,17 @@ class GMM(tdl.core.layers.Layer):
         return tf.Variable(tf.zeros(self.n_components),
                            trainable=trainable)
 
+    def get_components(self, loc_trainable=True, scale_trainable=True):
+        def get_trainable(x, trainable):
+            x = tf.convert_to_tensor(x)
+            return x if trainable else tf.stop_gradient(x)
+        return [tfp.distributions.MultivariateNormalDiag(
+                    loc=get_trainable(
+                        self.components.loc, loc_trainable)[idx, ...],
+                    scale_diag=get_trainable(
+                        self.components.scale, scale_trainable)[idx, ...])
+                for idx in range(self.n_components)]
+
     @tdl.core.SubmodelInit
     def dist(self, mix=None):
         tdl.core.assert_initialized(self, 'dist', ['components', 'logits'])

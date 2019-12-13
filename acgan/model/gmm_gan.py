@@ -175,14 +175,33 @@ class GmmEncoderTrainer(BaseTrainer):
                              for comp in embedding.dist.components]
                 loss = loss + embedding_kl * tf.add_n(comp_loss)
                 loss = tdl.core.SimpleNamespace(value=loss, sparsity=sparsity)
+            elif comp_loss == 'kl5':
+                sparse_loss = self._loss_linear_disc(
+                    loc_trainable=True, scale_trainable=False)
+                sparsity = tf.placeholder(tf.float32, shape=())
+                loss = loss + sparsity * embedding_kl * tf.reduce_mean(sparse_loss)
+
+                ref_scale = tfp.distributions.MultivariateNormalDiag(
+                    loc=tf.zeros([embedding.n_dims]),
+                    scale_diag=tf.constant(
+                        value=embedding.get_max_scale(),
+                        shape=[embedding.n_dims],
+                        dtype=tf.float32))
+                comp_loss = [scale_loss(comp, ref_scale)
+                             for comp in embedding.dist.components]
+                loss = loss + embedding_kl * tf.add_n(comp_loss)
+                loss = tdl.core.SimpleNamespace(value=loss, sparsity=sparsity)
             else:
                 raise ValueError('comp loss type {} not valid.'
                                  ''.format(comp_loss))
         return loss
 
-    def _loss_linear_disc(self):
+    def _loss_linear_disc(self, loc_trainable=True, scale_trainable=True):
         embedding = self.model.embedding
-        samp = tf.stack([comp.sample() for comp in embedding.dist.components],
+        samp = tf.stack([
+            comp.sample() for comp in embedding.get_components(
+                loc_trainable=loc_trainable,
+                scale_trainable=scale_trainable)],
                         axis=0)
         labels = tf.one_hot(list(range(embedding.n_components)),
                             depth=embedding.n_components)
@@ -191,7 +210,7 @@ class GmmEncoderTrainer(BaseTrainer):
             y_pred=self.model.linear_disc(samp),
             from_logits=True
         )
-        return loss
+        return tf.reduce_mean(loss)
 
     @tdl.core.SubmodelInit
     def loss(self, embedding_kl=None, use_zsim=True, comp_loss='kl'):
