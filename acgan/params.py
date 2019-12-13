@@ -380,6 +380,10 @@ PARAMS['stanford_dogs']['gmmgan']['run'] = {
 PARAMS['cifar10'] = {
     'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])
     }
+PARAMS['cifar10']['gmmgan']['global']: {
+    'USE_BIAS': {'generator': False, 'discriminator': False},
+    'USE_BATCH_NORM': False
+   }
 PARAMS['cifar10']['gmmgan']['model'] = {
     'embedding_size': 128,
     'embedding': {'n_components': 50, 'min_scale_p': 0.1,

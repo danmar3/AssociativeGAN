@@ -49,6 +49,10 @@ class ExperimentGMM(object):
     def restore_session(cls, session_path, dataset_name, indicator=None):
         with open(os.path.join(session_path, 'params.json'), "r") as file_h:
             params = json.load(file_h)
+        # remove n_start steps if loading a session
+        if 'n_start' in params['run']:
+            print('\n\n ---> resetting n_start to zero \n\n')
+            params['run']['n_start'] = 0
         experiment = cls(dataset_name=dataset_name, params=params,
                          indicator=indicator)
         experiment.restore(session_path)
