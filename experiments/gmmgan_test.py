@@ -87,6 +87,7 @@ def main():
             experiment = ExperimentGMM(dataset_name=FLAGS.dataset,
                                        indicator=FLAGS.indicator)
             if FLAGS.checkpoint is not None:
+                experiment.params['run']['n_start'] = 0
                 experiment.restore(FLAGS.checkpoint)
         # run training
         for step in tqdm.tqdm(range(int(FLAGS.n_steps))):
