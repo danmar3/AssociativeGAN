@@ -57,7 +57,7 @@ _CATEGORIES = [
 ]
 
 
-class LsunDogs(tfds.core.GeneratorBasedBuilder):
+class LsunObjects(tfds.core.GeneratorBasedBuilder):
     """Lsun dataset."""
     # Version history:
     # 3.0.0: S3 with new hashing function (different shuffle).
@@ -89,33 +89,30 @@ class LsunDogs(tfds.core.GeneratorBasedBuilder):
             )
 
     def _split_generators(self, dl_manager):
-        extracted_dirs = dl_manager.download_and_extract({
-            "train": LSUN_URL % (self.builder_config.name),
-            })
+        extracted_dirs = os.path.join(
+            dl_manager.manual_dir, self.builder_config.name)
         return [
             tfds.core.SplitGenerator(
                 name=tfds.Split.TRAIN,
                 num_shards=40,
                 gen_kwargs={
-                    "extracted_dir": extracted_dirs["train"],
-                    "file_path": "%s" % (self.builder_config.name)
-                    })
+                    "extracted_dir": os.path.join(extracted_dirs, "train")
+                    }),
+            tfds.core.SplitGenerator(
+                name=tfds.Split.VALIDATION,
+                num_shards=40,
+                gen_kwargs={
+                    "extracted_dir": os.path.join(extracted_dirs, "valid")
+                    }),
                 ]
 
-    def _generate_examples(self, extracted_dir, file_path):
+    def _generate_examples(self, extracted_dir):
         with tf.Graph().as_default():
-            # import pdb; pdb.set_trace()
             dataset = tf.contrib.data.LMDBDataset(
-                os.path.join(extracted_dir, file_path, "data.mdb"))
+                os.path.join(extracted_dir, "data.mdb"))
             for idx, (_, jpeg_image) in enumerate(tfds.as_numpy(dataset)):
-                # record = {"image": io.BytesIO(jpeg_image)}
-                img = cv2.imdecode(
-                    np.fromstring(jpeg_image, dtype=np.uint8), 1)
-                img_reencoded = cv2.imencode('.jpg', img)[1].tobytes()
-                record = {"image": io.BytesIO(img_reencoded)}
+                record = {"image": io.BytesIO(jpeg_image)}
                 if self.version.implements(tfds.core.Experiment.S3):
                     yield idx, record
                 else:
                     yield record
-                if idx > 20000:
-                    break

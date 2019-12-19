@@ -1,1 +1,4 @@
 http://dl.yf.io/lsun/objects/cow.zip 16039812046 c6ed6cf1bcf96760b08ebaa61e216020ab96bec7f10a7bfc95afdacd59b2da25
+http://dl.yf.io/lsun/objects/sheep.zip 19063172058 549234a3cb2608adddea405c0918c64b143ee5636a7d6426a90ccc870f0928d0
+http://dl.yf.io/lsun/objects/dog.zip 155606131278 dab08a84ce3facb2ac7261f58c1eea7f070a6d118b82f9778b6a1cf56ed15db4
+http://dl.yf.io/lsun/objects/cat.zip 44765061710 cef7d1926d80f271ccfe2c55a610a1f9958eb2ac0bd188ddbe3cceb571eb9877
