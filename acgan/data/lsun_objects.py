@@ -53,7 +53,26 @@ _CITATION = """\
 
 # From http://dl.yf.io/lsun/categories.txt minus "test"
 _CATEGORIES = [
-    "cow"
+    'cow',
+    # 'airplane'
+    # 'bicycle',
+    # 'bird',
+    # 'boat',
+    # 'bottle',
+    # 'bus',
+    # 'car',
+    'cat',
+    # 'chair',
+    # 'dining_table',
+    'dog',
+    # 'horse',
+    # 'motorbike',
+    # 'person',
+    # 'potted_plant',
+    'sheep',
+    # 'sofa',
+    # 'train',
+    # 'tv-monitor',
 ]
 
 

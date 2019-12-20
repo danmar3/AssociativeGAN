@@ -384,6 +384,11 @@ PARAMS['stanford_dogs']['gmmgan']['run'] = {
     'n_start': 100
     }
 
+for category in ['dog', 'cat', 'cow', 'sheep']:
+    PARAMS['lsun_{}'.format(category)] = {
+        'gmmgan': copy.deepcopy(PARAMS['stanford_dogs']['gmmgan'])
+    }
+
 
 PARAMS['cifar10'] = {
     'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])
