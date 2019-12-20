@@ -237,10 +237,14 @@ PARAMS = {
                 }
             }
         },
+    # python3 gmmgan_test.py --n_steps=100 --n_steps_save=3 --gpu=7 --dataset="imagenet_128" --datadir="/home/marinodl/datasets/"
     'imagenet_128': {
         'gmmgan': {
+            'global': {
+                'USE_BIAS': {'generator': False, 'discriminator': False},
+                'USE_BATCH_NORM': False},
             'model': {
-                'embedding_size': 64,
+                'embedding_size': 512,
                 'embedding': {'n_components': 100},
                 'encoder': {
                     'units': [32, 64, 64, 64],
@@ -270,12 +274,16 @@ PARAMS = {
             'encoder_trainer': {
                 'batch_size': 16,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
-                'loss': {'embedding_kl': 0.001}
+                'loss': {'embedding_kl': 0.001, 'use_zsim': True,
+                         'comp_loss': 'kl5'}
                 },
             'run': {
                 'gan_steps': 200,
                 'encoder_steps': 200,
-                'embedding_steps': 20,
+                'embedding_steps': 50,
+                'homogenize': True,
+                'reset_embedding': 5,
+                'n_start': 100
                 }
             }
         },
@@ -351,12 +359,12 @@ PARAMS['stanford_dogs']['gmmgan']['model'] = {
         'pooling': 2},
     'generator': {
         'init_shape': (4, 4, 512),
-        'units': [512, 512, 512, 256, 128],
+        'units': [512, 512, 512, 512, 256],
         'outputs': 3,
         'kernels': 3,
         'strides': 2},
     'discriminator': {
-        'units': [128, 256, 512, 512, 512],
+        'units': [256, 512, 512, 512, 512],
         'kernels': 3,
         'strides': 2,
         'dropout': None}
@@ -369,7 +377,7 @@ PARAMS['stanford_dogs']['gmmgan']['encoder_trainer'] = {
     }
 PARAMS['stanford_dogs']['gmmgan']['run'] = {
     'gan_steps': 200,
-    'encoder_steps': 500,
+    'encoder_steps': 200,
     'embedding_steps': 50,
     'homogenize': True,
     'reset_embedding': 5,
