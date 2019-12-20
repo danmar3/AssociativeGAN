@@ -70,6 +70,15 @@ def prepare_lmdb(input_fn, output_fn, max_images=10000):
     env_out, txn_out = None, None
     pbar = tqdm.tqdm(total=max_images*len(splits))
     for idx, (key, value) in enumerate(lmdb_reader(input_fn)):
+        if value:
+            img_mat = cv2.imdecode(np.frombuffer(value, dtype=np.uint8), 1)
+        else:
+            continue
+        if (isgray(img_mat)
+                or img_mat.shape[0]/img_mat.shape[1] > 1.1
+                or img_mat.shape[0]/img_mat.shape[1] < 0.5):
+            continue
+        # open lmdb if full
         if total_images % max_images == 0:
             if env_out is not None:
                 txn_out.commit()
@@ -81,15 +90,7 @@ def prepare_lmdb(input_fn, output_fn, max_images=10000):
                 map_size=15000000000)
             txn_out = env_out.begin(write=True, buffers=True)
 
-        if value:
-            img_mat = cv2.imdecode(np.frombuffer(value, dtype=np.uint8), 1)
-        else:
-            continue
-        if (isgray(img_mat)
-                or img_mat.shape[0]/img_mat.shape[1] > 1.1
-                or img_mat.shape[0]/img_mat.shape[1] < 0.5):
-            continue
-        # img_bin = tfds.as_numpy(tf.image.encode_jpeg(img))
+        # write to lmdb
         img_bin = cv2.imencode('.jpg', img_mat)[1].tobytes()
         txn_out.put(str(idx).encode('ascii'), img_bin)
         total_images += 1
@@ -101,11 +102,14 @@ def prepare_lmdb(input_fn, output_fn, max_images=10000):
 def download_and_prepare(data_dir='tmp/datasets',
                          output_dir='tmp/generated/',
                          category='cow',
-                         samples_per_split=50000):
+                         samples_per_split=50000,
+                         keep_download=False):
     if category not in CATEGORIES:
         raise ValueError('invalid category.')
     else:
         print('\n\nDownloading and preparing: {} \n\n'.format(category))
+    if keep_download:
+        print('\n\nKeeping downloaded files\n\n')
     download_dir = os.path.join(data_dir, 'download')
     extract_dir = os.path.join(download_dir, 'extract')
     download_mgr = tfds.download.DownloadManager(
@@ -118,7 +122,8 @@ def download_and_prepare(data_dir='tmp/datasets',
     base_dir = os.path.join(extracted_dir['all'], category)
     # generated_dir = os.path.join(download_dir, '')
     prepare_lmdb(base_dir, output_dir, max_images=samples_per_split)
-    shutil.rmtree(download_dir)
+    if not keep_download:
+        shutil.rmtree(download_dir)
 
 
 def main():
@@ -131,12 +136,15 @@ def main():
                         help='object category')
     parser.add_argument('--force', default=None,
                         help='force redownload')
+    parser.add_argument('--keep', default=False, action='store_true',
+                        help='force redownload')
 
     FLAGS = parser.parse_args()
     if FLAGS.category is not None:
         download_and_prepare(
             data_dir=FLAGS.data_dir, output_dir=FLAGS.output_dir,
-            category=FLAGS.category)
+            category=FLAGS.category,
+            keep_download=FLAGS.keep)
     else:
         for category in ['cow', 'sheep', 'dog', 'cat']:
             if (os.path.exists(os.path.join(FLAGS.output_dir, category))
@@ -144,7 +152,8 @@ def main():
                 continue
             download_and_prepare(
                 data_dir=FLAGS.data_dir, output_dir=FLAGS.output_dir,
-                category=category)
+                category=category,
+                keep_download=FLAGS.keep)
 
     print("move generated samples to '{datadir}/downloads/manual/lsun_objects'")
 
