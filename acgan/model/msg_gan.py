@@ -242,6 +242,9 @@ class Upsample2D(tdl.core.Layer):
 
 
 class NoiseLayer(tdl.core.Layer):
+    def compute_output_shape(self, input_shape):
+        return tf.TensorShape(input_shape)
+
     @tdl.core.ParameterInit(lazzy=True)
     def kernel(self, initializer=None, trainable=True, **kargs):
         tdl.core.assert_initialized(self, 'kernel', ['input_shape'])
@@ -261,7 +264,7 @@ class NoiseLayer(tdl.core.Layer):
             [tf.shape(inputs)[0], inputs.shape[1], inputs.shape[2], 1],
             dtype=inputs.dtype)
         return inputs + noise * tf.reshape(tf.cast(self.kernel, inputs.dtype),
-                                           [1, -1, 1, 1])
+                                           [1, 1, 1, -1])
 
 
 @tdl.core.create_init_docstring
@@ -301,7 +304,7 @@ class MSG_GeneratorHidden(tdl.core.Layer):
                 strides=[1, 1], padding=padding,
                 use_bias=USE_BIAS['generator']))
         if self.add_noise:
-            model.add(NoiseLayer)
+            model.add(NoiseLayer())
         model.add(tf_layers.LeakyReLU(LEAKY_RATE))
         if ((GeneratorFeatureNorm is not None)
                 and (GeneratorGlobal['fnorm_hidden'])):
@@ -311,7 +314,7 @@ class MSG_GeneratorHidden(tdl.core.Layer):
                 strides=[1, 1], padding=padding,
                 use_bias=USE_BIAS['generator']))
         if self.add_noise:
-            model.add(NoiseLayer)
+            model.add(NoiseLayer())
         return model
 
     @tdl.core.Submodel
