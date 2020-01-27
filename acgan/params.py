@@ -292,7 +292,7 @@ PARAMS = {
 
 PARAMS['rockps'] = {'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])}
 PARAMS['rockps']['gmmgan']['model'] = {
-    'embedding_size': 64,
+    'embedding_size': 32,
     'embedding': {'n_components': 20, 'min_scale_p': 0.1},
     'encoder': {
         'units': [32, 64, 64, 64],
@@ -301,12 +301,12 @@ PARAMS['rockps']['gmmgan']['model'] = {
         'pooling': 2},
     'generator': {
         'init_shape': (4, 4, 512),
-        'units': [512, 512, 512, 256, 128],
+        'units': [512, 512, 256, 256, 128],
         'outputs': 3,
         'kernels': 3,
         'strides': 2},
     'discriminator': {
-        'units': [128, 256, 512, 512, 512],
+        'units': [128, 256, 256, 512, 512],
         'kernels': 3,
         'strides': 2,
         'dropout': None}
@@ -384,9 +384,53 @@ PARAMS['stanford_dogs']['gmmgan']['run'] = {
     'n_start': 100
     }
 
+PARAMS['stanford_dogs64'] = {
+    'gmmgan': copy.deepcopy(PARAMS['stanford_dogs']['gmmgan'])
+    }
+PARAMS['stanford_dogs64']['gmmgan']['model'] = {
+    'embedding_size': 64,
+    'embedding': {'n_components': 50, 'min_scale_p': 0.1},
+    'encoder': {
+        'units': [32, 64, 128, 128],
+        'kernels': 3,
+        'strides': 1,
+        'pooling': 2},
+    'generator': {
+        'init_shape': (4, 4, 128),
+        'units': [256, 512, 512, 256],
+        'add_noise': [False, False, True, True],
+        'outputs': 3,
+        'kernels': 3,
+        'strides': 2},
+    'discriminator': {
+        'units': [128, 256, 256, 512],
+        'kernels': 3,
+        'strides': 2,
+        'dropout': None}
+    }
+PARAMS['stanford_dogs64']['gmmgan']['global'] = {
+    'USE_BIAS': {'generator': False, 'discriminator': False},
+    'USE_BATCH_NORM': False,
+    'GeneratorFeatureNorm': 'vector',
+    'GeneratorGlobal': {'fnorm_hidden': True}
+    }
+PARAMS['stanford_dogs64']['gmmgan']['run'] = {
+    'gan_steps': 200,
+    'encoder_steps': 200,
+    'embedding_steps': 50,
+    'homogenize': True,
+    'reset_embedding': 5,
+    'n_start': 10
+    }
+
 for category in ['dog', 'cat', 'cow', 'sheep']:
     PARAMS['lsun_{}'.format(category)] = {
         'gmmgan': copy.deepcopy(PARAMS['stanford_dogs']['gmmgan'])
+    }
+
+for category in ['dog64', 'cat64', 'cow64', 'sheep64']:
+    PARAMS['lsun_{}'.format(category)] = {
+        'gmmgan': copy.deepcopy(PARAMS['stanford_dogs64']['gmmgan'])
     }
 
 

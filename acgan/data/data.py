@@ -146,7 +146,7 @@ def load_cats_vs_dogs(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_stanford_dogs(batch_size, split=tfds.Split.TRAIN):
+def load_stanford_dogs(batch_size, size=128, split=tfds.Split.TRAIN):
     '''load cropped stanford dogs'''
     def filter_fn(batch):
         shape = tf.cast(tf.shape(batch), tf.float32)
@@ -172,7 +172,7 @@ def load_stanford_dogs(batch_size, split=tfds.Split.TRAIN):
         # reshape
         image = tf.image.resize_bilinear(
             batch[tf.newaxis, ...],
-            size=(128, 128),
+            size=(size, size),
             align_corners=False)
         # normalize
         image = (image-127.5)/127.5
@@ -202,11 +202,11 @@ def load_cifar10(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_lsun_128(batch_size, category, split=tfds.Split.TRAIN):
+def load_lsun(batch_size, category, size=128, split=tfds.Split.TRAIN):
     def map_fn(batch):
         batch = tf.cast(batch['image'], tf.float32)[tf.newaxis, ...]
         batch = tf.image.resize_bilinear(
-            batch, size=(128, 128), align_corners=False)
+            batch, size=(size, size), align_corners=False)
         batch = (batch-127.5)/127.5
         return batch[0, ...]
 
@@ -237,12 +237,21 @@ def load(name, batch_size):
         lambda batch_size: load_imagenet(batch_size, 128),
         'rockps': load_rockps,
         'cats_vs_dogs': load_cats_vs_dogs,
-        'stanford_dogs': load_stanford_dogs,
+        'stanford_dogs':
+        lambda batch_size: load_stanford_dogs(batch_size, size=128),
+        'stanford_dogs64':
+        lambda batch_size: load_stanford_dogs(batch_size, size=64),
         'cifar10': load_cifar10,
-        'lsun_dog': lambda batch_size: load_lsun_128(batch_size, 'dog'),
-        'lsun_cat': lambda batch_size: load_lsun_128(batch_size, 'cat'),
-        'lsun_cow': lambda batch_size: load_lsun_128(batch_size, 'cow'),
-        'lsun_sheep': lambda batch_size: load_lsun_128(batch_size, 'sheep')
+        'lsun_dog': lambda batch_size: load_lsun(batch_size, 'dog', size=128),
+        'lsun_cat': lambda batch_size: load_lsun(batch_size, 'cat', size=128),
+        'lsun_cow': lambda batch_size: load_lsun(batch_size, 'cow', size=128),
+        'lsun_sheep':
+        lambda batch_size: load_lsun(batch_size, 'sheep', size=128),
+        'lsun_dog64': lambda batch_size: load_lsun(batch_size, 'dog', size=64),
+        'lsun_cat64': lambda batch_size: load_lsun(batch_size, 'cat', size=64),
+        'lsun_cow64': lambda batch_size: load_lsun(batch_size, 'cow', size=64),
+        'lsun_sheep64':
+        lambda batch_size: load_lsun(batch_size, 'sheep', size=64)
 
     }
     return loaders[name](batch_size)

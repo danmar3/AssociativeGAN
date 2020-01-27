@@ -13,12 +13,26 @@ LEAKY_RATE = 0.2
 USE_BATCH_NORM = False
 # GeneratorFeatureNorm = None
 GeneratorFeatureNorm = VectorNormalizer  # tf.keras.layers.BatchNormalization()
+GeneratorGlobal = {'fnorm_hidden': True}
 
 
 def set_global(params):
-    global USE_BIAS, USE_BATCH_NORM
+    global USE_BIAS, USE_BATCH_NORM, GeneratorFeatureNorm
     USE_BIAS.update(params['USE_BIAS'])
     USE_BATCH_NORM = params['USE_BATCH_NORM']
+    if 'GeneratorFeatureNorm' in params:
+        given = params['GeneratorFeatureNorm']
+        if given is None:
+            GeneratorFeatureNorm = None
+        elif given == 'vector':
+            GeneratorFeatureNorm = VectorNormalizer
+        elif given == 'batchnorm':
+            GeneratorFeatureNorm = tf.keras.layers.BatchNormalization
+        else:
+            raise ValueError(
+                'GeneratorFeatureNorm not valid (got {})'.format(given))
+    if 'GeneratorGlobal' in params:
+        GeneratorGlobal.update(params['GeneratorGlobal'])
 
 
 def OutputActivation():
@@ -161,6 +175,9 @@ class MSGProjectionV2(MSGProjection):
         tdl.core.assert_initialized(self, 'projection', ['projected_shape'])
         model = tdl.stacked.StackedLayers()
         projected_shape = self.projected_shape.as_list()
+        if USE_BATCH_NORM:
+            model.add(tf.keras.layers.BatchNormalization())
+            print('USING BATCH NORM ON INPUT!!!!!!!')
         model.add(Conv2DTranspose(
             filters=projected_shape[-1],
             kernel_size=[projected_shape[0], projected_shape[1]],
@@ -224,6 +241,29 @@ class Upsample2D(tdl.core.Layer):
         return output
 
 
+class NoiseLayer(tdl.core.Layer):
+    @tdl.core.ParameterInit(lazzy=True)
+    def kernel(self, initializer=None, trainable=True, **kargs):
+        tdl.core.assert_initialized(self, 'kernel', ['input_shape'])
+        if initializer is None:
+            initializer = tf.keras.initializers.zeros()
+        return self.add_weight(
+            name='kernel',
+            initializer=initializer,
+            shape=[self.input_shape[-1].value],
+            trainable=trainable,
+            **kargs)
+
+    def call(self, inputs):
+        assert len(inputs.shape) == 4  # NHWC
+        inputs = tf.convert_to_tensor(inputs)
+        noise = tf.random_normal(
+            [tf.shape(inputs)[0], inputs.shape[1], inputs.shape[2], 1],
+            dtype=inputs.dtype)
+        return inputs + noise * tf.reshape(tf.cast(self.kernel, inputs.dtype),
+                                           [1, -1, 1, 1])
+
+
 @tdl.core.create_init_docstring
 class MSG_GeneratorHidden(tdl.core.Layer):
     @tdl.core.InputArgument
@@ -240,11 +280,19 @@ class MSG_GeneratorHidden(tdl.core.Layer):
             raise tdl.core.exceptions.ArgumentNotProvided()
         return value
 
+    @tdl.core.InputArgument
+    def add_noise(self, value):
+        '''add noise layer.'''
+        if value is None:
+            raise tdl.core.exceptions.ArgumentNotProvided()
+        return value
+
     @tdl.core.SubmodelInit
     def conv(self, kernels=None, padding='same', interpolation='nearest'):
         if kernels is None:
             kernels = (3, 3)
-        tdl.core.assert_initialized(self, 'conv', ['units', 'upsampling'])
+        tdl.core.assert_initialized(
+            self, 'conv', ['units', 'upsampling', 'add_noise'])
         model = tdl.stacked.StackedLayers()
         model.add(Upsample2D(scale=self.upsampling,
                              interpolation=interpolation))
@@ -252,13 +300,18 @@ class MSG_GeneratorHidden(tdl.core.Layer):
                 filters=self.units, kernel_size=list(kernels),
                 strides=[1, 1], padding=padding,
                 use_bias=USE_BIAS['generator']))
+        if self.add_noise:
+            model.add(NoiseLayer)
         model.add(tf_layers.LeakyReLU(LEAKY_RATE))
-        if GeneratorFeatureNorm is not None:
+        if ((GeneratorFeatureNorm is not None)
+                and (GeneratorGlobal['fnorm_hidden'])):
             model.add(GeneratorFeatureNorm())
         model.add(Conv2DLayer(
                 filters=self.units, kernel_size=list(kernels),
                 strides=[1, 1], padding=padding,
                 use_bias=USE_BIAS['generator']))
+        if self.add_noise:
+            model.add(NoiseLayer)
         return model
 
     @tdl.core.Submodel
@@ -268,8 +321,8 @@ class MSG_GeneratorHidden(tdl.core.Layer):
             model.add(tf_layers.LeakyReLU(LEAKY_RATE))
         if GeneratorFeatureNorm is not None:
             model.add(GeneratorFeatureNorm())
-        if USE_BATCH_NORM:
-            model.add(tf.keras.layers.BatchNormalization())
+        # if USE_BATCH_NORM:
+        #     model.add(tf.keras.layers.BatchNormalization())
         return model
 
     def compute_output_shape(self, input_shape):
