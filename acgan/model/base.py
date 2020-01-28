@@ -141,7 +141,7 @@ class GeneratorTrainer(BaseTrainer):
     def loss(self, _):
         tdl.core.assert_initialized(self, 'loss', ['batch_size', 'xsim'])
         pred = self.discriminator(self.xsim, training=True)
-        loss = tf.keras.losses.BinaryCrossentropy()(
+        loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
             tf.ones_like(pred), pred)
         return loss
 
@@ -200,9 +200,9 @@ class DiscriminatorTrainer(BaseTrainer):
         pred_real = self.discriminator(self.xreal, training=True)
         pred_sim = self.discriminator(self.xsim, training=True)
         pred = tf.concat([pred_real, pred_sim], axis=0)
-        loss_real = tf.keras.losses.BinaryCrossentropy()(
+        loss_real = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
             tf.ones_like(pred_real), pred_real)
-        loss_sim = tf.keras.losses.BinaryCrossentropy()(
+        loss_sim = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
             tf.zeros_like(pred_sim), pred_sim)
         loss = (loss_real + loss_sim)/2.0
         return loss
@@ -250,7 +250,8 @@ class DiscriminatorOutputBase(tdl.stacked.StackedLayers):
     def layers(self, _):
         value = [tf_layers.Flatten(),
                  tf_layers.Dense(1),
-                 tf_layers.Activation(tf.keras.activations.sigmoid)]
+                 # tf_layers.Activation(tf.keras.activations.sigmoid)
+                 ]
         return value
 
 

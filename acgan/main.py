@@ -321,7 +321,7 @@ class ExperimentGMM(object):
         Z_embedded = TSNE(n_components=2).fit_transform(Z)
         ax.scatter(Z_embedded[:, 0], Z_embedded[:, 1])
 
-    def visualize(self, save=False, filename=None):
+    def visualize(self, save=False, filename=None, visualize_manifold=False):
         if filename is None:
             folder = os.path.join(self.output_dir, 'images')
             if not os.path.exists(folder):
@@ -354,7 +354,8 @@ class ExperimentGMM(object):
         ax2 = fig.add_subplot(gs[20:22, 8:10])
         probs = self.model.embedding.dist.cat.probs.eval()
         ax1.bar(x=range(probs.shape[0]), height=probs)
-        self.visualize_manifold(ax=ax2)
+        if visualize_manifold:
+            self.visualize_manifold(ax=ax2)
 
         ax = reserve_ax(start=22, scale=(1, 1), shape=(8, 10))
         self.visualize_reconstruction(ax=ax)

@@ -8,6 +8,29 @@ from .msg_gan import (MSG_GAN, MSG_DiscriminatorTrainer, MSG_GeneratorTrainer,
                       AffineLayer, Conv2DLayer, LEAKY_RATE)
 from .base import BaseTrainer
 
+# Taken from
+# https://github.com/NVlabs/stylegan/blob/master/training/loss.py
+def D_logistic_simplegp(G, D, opt, training_set, minibatch_size, reals, labels, r1_gamma=10.0, r2_gamma=0.0): # pylint: disable=unused-argument
+    real_scores_out = D.get_output_for(reals, labels, is_training=True)
+    fake_scores_out = D.get_output_for(fake_images_out, labels, is_training=True)
+    loss = tf.nn.softplus(fake_scores_out)  # -log(1 - logistic(fake_scores_out))
+    loss += tf.nn.softplus(-real_scores_out)  # -log(logistic(real_scores_out)) # temporary pylint workaround # pylint: disable=invalid-unary-operand-type
+
+    if r1_gamma != 0.0:
+        with tf.name_scope('R1Penalty'):
+            real_loss = tf.reduce_sum(real_scores_out)
+            real_grads = tf.gradients(real_loss, [reals])[0]
+            r1_penalty = tf.reduce_sum(tf.square(real_grads), axis=[1, 2, 3])
+        loss += r1_penalty * (r1_gamma * 0.5)
+
+    if r2_gamma != 0.0:
+        with tf.name_scope('R2Penalty'):
+            fake_loss = tf.reduce_sum(fake_scores_out)
+            fake_grads = tf.gradients(fake_loss, [fake_images_out])[0]
+            r2_penalty = tf.reduce_sum(tf.square(fake_grads), axis=[1, 2, 3])
+        loss += r2_penalty * (r2_gamma * 0.5)
+    return loss
+
 
 class GmmDiscriminatorTrainer(MSG_DiscriminatorTrainer):
     @tdl.core.Submodel
@@ -22,9 +45,9 @@ class GmmDiscriminatorTrainer(MSG_DiscriminatorTrainer):
             self, 'loss', ['real_pyramid', 'sim_pyramid', 'regularizer'])
         pred_real = self.discriminator(self.real_pyramid)
         pred_sim = self.discriminator(self.sim_pyramid)
-        loss_real = tf.keras.losses.BinaryCrossentropy()(
+        loss_real = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
                 tf.ones_like(pred_real), pred_real)
-        loss_sim = tf.keras.losses.BinaryCrossentropy()(
+        loss_sim = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
                 tf.zeros_like(pred_sim), pred_sim)
         loss = (loss_real + loss_sim)/2.0
         return loss
@@ -273,7 +296,7 @@ class GmmGeneratorTrainer(MSG_GeneratorTrainer):
             self, 'loss', ['batch_size', 'xsim', 'sim_pyramid', 'regularizer',
                            'pyramid_loss'])
         pred = self.discriminator(self.sim_pyramid)
-        loss = tf.keras.losses.BinaryCrossentropy()(
+        loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
                 tf.ones_like(pred), pred)
         # regularizer
         if self.regularizer is not None:

@@ -622,7 +622,7 @@ class MSG_GeneratorTrainer(GeneratorTrainer):
             self, 'loss', ['batch_size', 'xsim', 'sim_pyramid', 'regularizer',
                            'pyramid_loss'])
         pred = self.discriminator(self.sim_pyramid)
-        loss = tf.keras.losses.BinaryCrossentropy()(
+        loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
                 tf.ones_like(pred), pred)
         # regularizer
         if self.regularizer is not None:
@@ -684,7 +684,8 @@ class MSG_DiscriminatorOutput(tdl.stacked.StackedLayers):
             tf_layers.LeakyReLU(LEAKY_RATE),
             tf_layers.Flatten(),
             AffineLayer(units=1),
-            tf_layers.Activation(tf.keras.activations.sigmoid)]
+            # tf_layers.Activation(tf.keras.activations.sigmoid),
+            ]
         return value
 
 
@@ -713,9 +714,9 @@ class MSG_DiscriminatorTrainer(DiscriminatorTrainer):
             self, 'loss', ['real_pyramid', 'sim_pyramid', 'regularizer'])
         pred_real = self.discriminator(self.real_pyramid)
         pred_sim = self.discriminator(self.sim_pyramid)
-        loss_real = tf.keras.losses.BinaryCrossentropy()(
+        loss_real = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
                 tf.ones_like(pred_real), pred_real)
-        loss_sim = tf.keras.losses.BinaryCrossentropy()(
+        loss_sim = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
                 tf.zeros_like(pred_sim), pred_sim)
         loss = (loss_real + loss_sim)/2.0
         return loss
@@ -743,6 +744,7 @@ class MSG_GAN(BaseGAN):
     DiscriminatorBaseModel = MSG_DiscriminatorModel
     DiscriminatorHidden = MSG_DiscriminatorHidden
     DiscriminatorTrainer = MSG_DiscriminatorTrainer
+    DiscriminatorOutput = MSG_DiscriminatorOutput
 
     @tdl.core.SubmodelInit
     def pyramid(self, interpolation='bilinear'):
