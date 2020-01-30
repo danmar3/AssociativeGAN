@@ -346,11 +346,13 @@ PARAMS['stanford_dogs'] = {
     'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])
     }
 PARAMS['stanford_dogs']['gmmgan']['global'] = {
-    'USE_BIAS': {'generator': False, 'discriminator': False},
-    'USE_BATCH_NORM': False
+    'USE_BIAS': {'generator': True, 'discriminator': True},
+    'USE_BATCH_NORM': False,
+    'GeneratorFeatureNorm': 'vector',
+    'GeneratorGlobal': {'fnorm_hidden': True}
     }
 PARAMS['stanford_dogs']['gmmgan']['model'] = {
-    'embedding_size': 512,
+    'embedding_size': 256,
     'embedding': {'n_components': 50, 'min_scale_p': 0.1},
     'encoder': {
         'units': [32, 64, 64, 64],
@@ -359,12 +361,13 @@ PARAMS['stanford_dogs']['gmmgan']['model'] = {
         'pooling': 2},
     'generator': {
         'init_shape': (4, 4, 512),
-        'units': [512, 512, 512, 512, 256],
+        'units': [512, 512, 512, 256, 128],
+        'add_noise': [False, True, True, True, False],
         'outputs': 3,
         'kernels': 3,
         'strides': 2},
     'discriminator': {
-        'units': [256, 512, 512, 512, 512],
+        'units': [128, 256, 512, 512, 512],
         'kernels': 3,
         'strides': 2,
         'dropout': None}
@@ -391,19 +394,19 @@ PARAMS['stanford_dogs64']['gmmgan']['model'] = {
     'embedding_size': 64,
     'embedding': {'n_components': 50, 'min_scale_p': 0.1},
     'encoder': {
-        'units': [32, 64, 128, 128],
+        'units': [32, 64, 64, 64],
         'kernels': 3,
         'strides': 1,
         'pooling': 2},
     'generator': {
         'init_shape': (4, 4, 128),
-        'units': [256, 512, 512, 256],
+        'units': [512, 512, 512, 256],
         'add_noise': [False, False, True, True],
         'outputs': 3,
         'kernels': 3,
         'strides': 2},
     'discriminator': {
-        'units': [128, 256, 256, 512],
+        'units': [256, 512, 512, 512],
         'kernels': 3,
         'strides': 2,
         'dropout': None}
