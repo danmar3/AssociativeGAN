@@ -352,7 +352,7 @@ PARAMS['stanford_dogs']['gmmgan']['global'] = {
     'GeneratorGlobal': {'fnorm_hidden': True}
     }
 PARAMS['stanford_dogs']['gmmgan']['model'] = {
-    'embedding_size': 256,
+    'embedding_size': 512,
     'embedding': {'n_components': 50, 'min_scale_p': 0.1},
     'encoder': {
         'units': [32, 64, 64, 64],
@@ -361,13 +361,13 @@ PARAMS['stanford_dogs']['gmmgan']['model'] = {
         'pooling': 2},
     'generator': {
         'init_shape': (4, 4, 512),
-        'units': [512, 512, 512, 256, 128],
+        'units': [512, 512, 512, 256, 256],
         'add_noise': [False, True, True, True, False],
         'outputs': 3,
         'kernels': 3,
         'strides': 2},
     'discriminator': {
-        'units': [128, 256, 512, 512, 512],
+        'units': [256, 256, 512, 512, 512],
         'kernels': 3,
         'strides': 2,
         'dropout': None}
