@@ -6,9 +6,10 @@ from setuptools import setup, find_packages
 # for development installation: pip install -e .
 # for distribution: python setup.py sdist #bdist_wheel
 #                   pip install dist/project_name.tar.gz
-DEPS = ['tensorflow-probability', 'tensorflow-datasets',
+DEPS = ['tensorflow-probability==0.6.0', 'tensorflow-datasets==1.2.0',
         'pandas', 'matplotlib', 'jupyter', 'scipy',
-        'attrs', 'Pillow', 'GPUtil', 'scikit-learn']
+        'attrs', 'Pillow', 'GPUtil', 'scikit-learn',
+        'opencv-python']
 
 DEPS_DEV = ['Sphinx', 'sphinx_rtd_theme']
 

@@ -16,10 +16,19 @@ class GmmDiscriminatorTrainer(MSG_DiscriminatorTrainer):
         sample = self.model.embedding(self.batch_size)
         return sample
 
+    @tdl.core.InputArgument
+    def loss_type(self, value):
+        if value is None:
+            value = 'logistic'
+        if value not in ('logistic', 'simplegp'):
+            raise ValueError('loss_type {} not recognized.'.format(value))
+        return value
+
     # Taken from
     # https://github.com/NVlabs/stylegan/blob/master/training/loss.py
     def _D_logistic_simplegp(self, r1_gamma=10.0, r2_gamma=0.0):
-        real_scores = self.discriminator(self.real_pyramid)
+        real_pyramid = [tf.stop_gradient(img) for img in self.real_pyramid]
+        real_scores = self.discriminator(real_pyramid)
         sim_scores = self.discriminator(self.sim_pyramid)
 
         loss_real = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
@@ -28,6 +37,8 @@ class GmmDiscriminatorTrainer(MSG_DiscriminatorTrainer):
                     tf.zeros_like(sim_scores), sim_scores)
         loss = (loss_real + loss_sim)/2.0
 
+        real_images = real_pyramid[-1]
+        fake_images = self.sim_pyramid[-1]
         if r1_gamma != 0.0:
             with tf.name_scope('R1Penalty'):
                 real_loss = tf.reduce_sum(real_scores)
@@ -43,13 +54,10 @@ class GmmDiscriminatorTrainer(MSG_DiscriminatorTrainer):
                 r2_penalty = tf.reduce_sum(tf.square(fake_grads),
                                            axis=[1, 2, 3])
             loss += tf.reduce_mean(r2_penalty) * (r2_gamma * 0.5)
-        assert loss.shape == ()
+        assert loss.shape == tf.TensorShape(())
         return loss
 
-    @tdl.core.OutputValue
-    def loss(self, _):
-        tdl.core.assert_initialized(
-            self, 'loss', ['real_pyramid', 'sim_pyramid', 'regularizer'])
+    def _D_logistic(self):
         pred_real = self.discriminator(self.real_pyramid)
         pred_sim = self.discriminator(self.sim_pyramid)
         loss_real = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
@@ -57,6 +65,17 @@ class GmmDiscriminatorTrainer(MSG_DiscriminatorTrainer):
         loss_sim = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
                 tf.zeros_like(pred_sim), pred_sim)
         loss = (loss_real + loss_sim)/2.0
+        return loss
+
+    @tdl.core.OutputValue
+    def loss(self, _):
+        tdl.core.assert_initialized(
+            self, 'loss', ['real_pyramid', 'sim_pyramid', 'regularizer',
+                           'loss_type'])
+        if self.loss_type == 'logistic':
+            loss = self._D_logistic()
+        elif self.loss_type == 'simplegp':
+            loss = self._D_logistic_simplegp()
         return loss
         # Regularizer
         if self.regularizer is not None:

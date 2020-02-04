@@ -465,6 +465,12 @@ PARAMS['cifar10']['gmmgan']['model'] = {
         'strides': 2,
         'dropout': None}
     }
+
+PARAMS['cifar10']['gmmgan']['discriminator_trainer'] = {
+    'batch_size': 16,
+    'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+    'loss_type': 'simplegp'
+    }
 PARAMS['cifar10']['gmmgan']['encoder_trainer'] = {
     'batch_size': 16,
     'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
