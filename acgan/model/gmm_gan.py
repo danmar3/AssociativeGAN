@@ -37,14 +37,19 @@ class GmmDiscriminatorTrainer(MSG_DiscriminatorTrainer):
                     tf.zeros_like(sim_scores), sim_scores)
         loss = (loss_real + loss_sim)/2.0
 
-        real_images = real_pyramid[-1]
+        # real_images = real_pyramid[-1]
         fake_images = self.sim_pyramid[-1]
         if r1_gamma != 0.0:
             with tf.name_scope('R1Penalty'):
                 real_loss = tf.reduce_sum(real_scores)
-                real_grads = tf.gradients(real_loss, [real_images])[0]
-                r1_penalty = tf.reduce_sum(tf.square(real_grads),
-                                           axis=[1, 2, 3])
+                # real_grads = tf.gradients(real_loss, [real_images])[0]
+                # r1_penalty = tf.reduce_sum(tf.square(real_grads),
+                #                            axis=[1, 2, 3])
+                real_grads = tf.gradients(real_loss, real_pyramid)
+                r1_penalty = tf.add_n([
+                    tf.reduce_sum(tf.square(grads_i), axis=[1, 2, 3])
+                    for grads_i in real_grads
+                ])/len(real_grads)
             loss += tf.reduce_mean(r1_penalty) * (r1_gamma * 0.5)
 
         if r2_gamma != 0.0:
