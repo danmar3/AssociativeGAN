@@ -60,6 +60,7 @@ class GmmDiscriminatorTrainer(MSG_DiscriminatorTrainer):
                                            axis=[1, 2, 3])
             loss += tf.reduce_mean(r2_penalty) * (r2_gamma * 0.5)
         assert loss.shape == tf.TensorShape(())
+        print("\n\n---> USING GP LOSS \n\n")
         return loss
 
     def _D_logistic(self):
