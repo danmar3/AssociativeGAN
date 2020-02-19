@@ -441,6 +441,12 @@ for category in ['dog64', 'cat64', 'cow64', 'sheep64']:
         'gmmgan': copy.deepcopy(PARAMS['stanford_dogs64']['gmmgan'])
     }
 
+PARAMS['stl10'] = {
+    'gmmgan': copy.deepcopy(PARAMS['stanford_dogs']['gmmgan'])
+    }
+PARAMS['stl10_64'] = {
+    'gmmgan': copy.deepcopy(PARAMS['stanford_dogs64']['gmmgan'])
+    }
 
 PARAMS['cifar10'] = {
     'gmmgan': copy.deepcopy(PARAMS['celeb_a']['gmmgan'])
