@@ -220,6 +220,22 @@ def load_lsun(batch_size, category, size=128, split=tfds.Split.TRAIN):
     return dataset
 
 
+def load_stl10(batch_size, size=128, split=tfds.Split.TRAIN):
+    def map_fn(batch):
+        batch = tf.cast(batch['image'], tf.float32)
+        batch = tf.image.resize_bilinear(
+            batch, size=(size, size), align_corners=False)
+        batch = (batch-127.5)/127.5
+        return batch
+    dataset, info = tfds.load(
+        'stl10', with_info=True, split=split, data_dir=DATA_DIR)
+    dataset = dataset.shuffle(1000).repeat()\
+        .batch(batch_size)\
+        .map(map_fn)\
+        .prefetch(tf.data.experimental.AUTOTUNE)
+    return dataset
+
+
 def load(name, batch_size):
     def load_imagenet(batch_size, resolution):
         return imagenet2012.load_imagenet2012(
@@ -251,7 +267,9 @@ def load(name, batch_size):
         'lsun_cat64': lambda batch_size: load_lsun(batch_size, 'cat', size=64),
         'lsun_cow64': lambda batch_size: load_lsun(batch_size, 'cow', size=64),
         'lsun_sheep64':
-        lambda batch_size: load_lsun(batch_size, 'sheep', size=64)
+        lambda batch_size: load_lsun(batch_size, 'sheep', size=64),
+        'stl10': lambda batch_size: load_stl10(batch_size, size=128),
+        'stl10_64': lambda batch_size: load_stl10(batch_size, size=64),
 
     }
     return loaders[name](batch_size)
