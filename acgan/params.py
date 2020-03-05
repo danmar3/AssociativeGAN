@@ -495,3 +495,14 @@ PARAMS['cifar10']['gmmgan']['run'] = {
     'homogenize': False,
     'reset_embedding': 5
     }
+
+
+datasets = (['celeb_a', 'stanford_dogs', 'stanford_dogs64',
+             'stl10', 'stl10_64',
+             'cifar10'] +
+            ['lsun_{}'.format(d) for d in ['dog', 'cat', 'cow', 'sheep']] +
+            ['lsun_{}64'.format(d) for d in ['dog', 'cat', 'cow', 'sheep']]
+            )
+
+for dataset in datasets:
+    PARAMS[dataset]['wacgan'] = copy.deepcopy(PARAMS[dataset]['gmmgan'])

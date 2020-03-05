@@ -11,6 +11,7 @@ from . import params as acgan_params
 from .train import run_training
 from .model import msg_gan
 from .model.gmm_gan import GmmGan
+from .model.wacgan import WacGan
 from twodlearn.core import nest
 import functools
 from sklearn.manifold import TSNE
@@ -45,6 +46,9 @@ def eager_function(func):
 
 
 class ExperimentGMM(object):
+    name = 'gmmgan'
+    Model = GmmGan
+
     @classmethod
     def restore_session(cls, session_path, dataset_name, indicator=None):
         with open(os.path.join(session_path, 'params.json'), "r") as file_h:
@@ -70,7 +74,6 @@ class ExperimentGMM(object):
             json.dump(self.params, file_h)
 
     def __init__(self, dataset_name='celeb_a', params=None, indicator=None):
-        self.name = 'gmmgan'
         self.indicator = indicator
         self.session = (tf.compat.v1.get_default_session()
                         if tf.compat.v1.get_default_session() is not None
@@ -91,7 +94,7 @@ class ExperimentGMM(object):
         dataset = data.load(
             name=dataset_name,
             batch_size=self.params['generator_trainer']['batch_size'])
-        self.model = GmmGan(**self.params['model'])
+        self.model = self.Model(**self.params['model'])
         iter = dataset.make_one_shot_iterator()
         xreal = iter.get_next()
         self.trainer = tdl.core.SimpleNamespace(
@@ -375,3 +378,8 @@ class ExperimentGMM(object):
             folder,
             now.year, now.month, now.day, now.hour, now.minute)
         self.saver.save(self.session, filename)
+
+
+class ExperimentWACGAN(ExperimentGMM):
+    name = 'wacgan'
+    Model = WacGan
