@@ -111,6 +111,7 @@ class BaseTrainer(tdl.core.TdlModel):
 
     @tdl.core.InputArgument
     def batch_size(self, value):
+        '''Number of images extracted/generated for training.'''
         return value
 
     @tdl.core.SubmodelInit
@@ -120,12 +121,14 @@ class BaseTrainer(tdl.core.TdlModel):
 
     @tdl.core.LazzyProperty
     def train_step(self):
+        '''Number of training steps executed.'''
         return tf.Variable(0, dtype=tf.int32, name='train_step')
 
 
 class GeneratorTrainer(BaseTrainer):
     @tdl.core.OutputValue
     def embedding(self, _):
+        '''Random samples in embedded space used to generate images.'''
         return tf.random.normal([self.batch_size, self.embedding_size])
 
     @tdl.core.OutputValue
@@ -138,7 +141,7 @@ class GeneratorTrainer(BaseTrainer):
     def loss(self, _):
         tdl.core.assert_initialized(self, 'loss', ['batch_size', 'xsim'])
         pred = self.discriminator(self.xsim, training=True)
-        loss = tf.keras.losses.BinaryCrossentropy()(
+        loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
             tf.ones_like(pred), pred)
         return loss
 
@@ -170,6 +173,7 @@ def _add_noise(samples, noise_rate):
 class DiscriminatorTrainer(BaseTrainer):
     @tdl.core.InputArgument
     def xreal(self, value):
+        '''real images obtained from the dataset'''
         tdl.core.assert_initialized(self, 'xreal', ['train_step'])
         noise_rate = self.model.noise_rate(self.train_step)
         if noise_rate is not None:
@@ -182,6 +186,7 @@ class DiscriminatorTrainer(BaseTrainer):
 
     @tdl.core.OutputValue
     def xsim(self, _):
+        '''generated images from the genrator model'''
         tdl.core.assert_initialized(self, 'xsim', ['embedding'])
         xsim = self.generator(self.embedding, training=True)
         noise_rate = self.model.noise_rate(self.train_step)
@@ -195,9 +200,9 @@ class DiscriminatorTrainer(BaseTrainer):
         pred_real = self.discriminator(self.xreal, training=True)
         pred_sim = self.discriminator(self.xsim, training=True)
         pred = tf.concat([pred_real, pred_sim], axis=0)
-        loss_real = tf.keras.losses.BinaryCrossentropy()(
+        loss_real = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
             tf.ones_like(pred_real), pred_real)
-        loss_sim = tf.keras.losses.BinaryCrossentropy()(
+        loss_sim = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
             tf.zeros_like(pred_sim), pred_sim)
         loss = (loss_real + loss_sim)/2.0
         return loss
@@ -240,12 +245,13 @@ class DiscriminatorHidden(tdl.stacked.StackedLayers):
         super(DiscriminatorHidden, self).__init__(**kargs)
 
 
-class DiscriminatorOutput(tdl.stacked.StackedLayers):
+class DiscriminatorOutputBase(tdl.stacked.StackedLayers):
     @tdl.core.Submodel
     def layers(self, _):
         value = [tf_layers.Flatten(),
                  tf_layers.Dense(1),
-                 tf_layers.Activation(tf.keras.activations.sigmoid)]
+                 # tf_layers.Activation(tf.keras.activations.sigmoid)
+                 ]
         return value
 
 
@@ -259,14 +265,19 @@ class BaseGAN(tdl.core.TdlModel):
 
     DiscriminatorBaseModel = tdl.stacked.StackedLayers
     DiscriminatorHidden = DiscriminatorHidden
-    DiscriminatorOutput = DiscriminatorOutput
+    DiscriminatorOutput = DiscriminatorOutputBase
     DiscriminatorTrainer = DiscriminatorTrainer
 
     @staticmethod
     def _to_list(value, n_elements):
+        '''check if value is a list. If not, return a list with n_elements.
+
+        If value is an integer, each element is a 2-dim tuple (value, value).
+        If value is an iterable, each element of the new list is a tuple
+        with duplicated elements (value[i], value[i]) '''
         if isinstance(value, int):
             value = [value]*n_elements
-        if isinstance(value[0], int):
+        if isinstance(value[0], int) or (value[0] is None):
             value = [[vi, vi] for vi in value]
         assert len(value) == n_elements, \
             'list does not have the expected number of elements'
@@ -276,17 +287,20 @@ class BaseGAN(tdl.core.TdlModel):
 
     @tdl.core.LazzyProperty
     def target_shape(self):
+        '''Shape of the generated images.'''
         tdl.core.assert_initialized(self, 'target_shape', ['generator'])
         return self.generator.compute_output_shape(
             [None, self.embedding_size])[1:]
 
     @tdl.core.SubmodelInit
     def generator(self, init_shape, units, outputs, output_kargs=None,
-                  kernels=5, strides=2,
+                  kernels=5, strides=2, add_noise=False,
                   padding='same'):
         n_layers = len(units) + 1
         kernels = self._to_list(kernels, n_layers)
         strides = self._to_list(strides, n_layers)
+        add_noise = (add_noise if isinstance(add_noise, (list, tuple))
+                     else [add_noise]*n_layers)
         padding = (padding if isinstance(padding, (list, tuple))
                    else [padding]*n_layers)
         model = self.GeneratorBaseModel(
@@ -294,7 +308,7 @@ class BaseGAN(tdl.core.TdlModel):
         model.add(self.InputProjection(projected_shape=init_shape))
         for i in range(len(units)):
             model.add(self.GeneratorHidden(
-                units=units[i], upsampling=strides[i],
+                units=units[i], upsampling=strides[i], add_noise=add_noise[i],
                 conv={'kernels': kernels[i], 'padding': padding[i]}))
         if output_kargs is None:
             output_kargs = dict()

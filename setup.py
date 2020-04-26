@@ -6,9 +6,12 @@ from setuptools import setup, find_packages
 # for development installation: pip install -e .
 # for distribution: python setup.py sdist #bdist_wheel
 #                   pip install dist/project_name.tar.gz
-DEPS = ['tensorflow-probability', 'pandas', 'twodlearn',
-        'matplotlib', 'jupyter', 'scipy', 'tensorflow-datasets',
-        'attrs']
+DEPS = ['tensorflow-probability==0.6.0', 'tensorflow-datasets==1.2.0',
+        'pandas', 'matplotlib', 'jupyter', 'scipy',
+        'attrs', 'Pillow', 'GPUtil', 'scikit-learn',
+        'opencv-python']
+
+DEPS_DEV = ['Sphinx', 'sphinx_rtd_theme']
 
 
 def get_dependencies():
@@ -28,6 +31,9 @@ setup(name='acgan',
           exclude=["*test*", "tests"]),
       package_data={'': ['*.so']},
       install_requires=get_dependencies(),
+      extras_require={
+          'dev': DEPS_DEV
+      },
       author='Daniel L. Marino',
       author_email='marinodl@vcu.edu',
       licence='GPL',

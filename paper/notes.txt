@@ -1,0 +1,5 @@
+
+Main idea:
+Classic GAN architectures have a latent space drawn from a normal distribution.
+The embedding space has no structure at all that the GAN can exploit to
+facilitate the generation.

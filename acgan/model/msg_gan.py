@@ -10,7 +10,29 @@ import tensorflow.keras.layers as tf_layers
 
 USE_BIAS = {'generator': True, 'discriminator': True}
 LEAKY_RATE = 0.2
+USE_BATCH_NORM = False
+# GeneratorFeatureNorm = None
 GeneratorFeatureNorm = VectorNormalizer  # tf.keras.layers.BatchNormalization()
+GeneratorGlobal = {'fnorm_hidden': True}
+
+
+def set_global(params):
+    global USE_BIAS, USE_BATCH_NORM, GeneratorFeatureNorm
+    USE_BIAS.update(params['USE_BIAS'])
+    USE_BATCH_NORM = params['USE_BATCH_NORM']
+    if 'GeneratorFeatureNorm' in params:
+        given = params['GeneratorFeatureNorm']
+        if given is None:
+            GeneratorFeatureNorm = None
+        elif given == 'vector':
+            GeneratorFeatureNorm = VectorNormalizer
+        elif given == 'batchnorm':
+            GeneratorFeatureNorm = tf.keras.layers.BatchNormalization
+        else:
+            raise ValueError(
+                'GeneratorFeatureNorm not valid (got {})'.format(given))
+    if 'GeneratorGlobal' in params:
+        GeneratorGlobal.update(params['GeneratorGlobal'])
 
 
 def OutputActivation():
@@ -153,6 +175,9 @@ class MSGProjectionV2(MSGProjection):
         tdl.core.assert_initialized(self, 'projection', ['projected_shape'])
         model = tdl.stacked.StackedLayers()
         projected_shape = self.projected_shape.as_list()
+        if USE_BATCH_NORM:
+            model.add(tf.keras.layers.BatchNormalization())
+            print('USING BATCH NORM ON INPUT!!!!!!!')
         model.add(Conv2DTranspose(
             filters=projected_shape[-1],
             kernel_size=[projected_shape[0], projected_shape[1]],
@@ -216,6 +241,32 @@ class Upsample2D(tdl.core.Layer):
         return output
 
 
+class NoiseLayer(tdl.core.Layer):
+    def compute_output_shape(self, input_shape):
+        return tf.TensorShape(input_shape)
+
+    @tdl.core.ParameterInit(lazzy=True)
+    def kernel(self, initializer=None, trainable=True, **kargs):
+        tdl.core.assert_initialized(self, 'kernel', ['input_shape'])
+        if initializer is None:
+            initializer = tf.keras.initializers.zeros()
+        return self.add_weight(
+            name='kernel',
+            initializer=initializer,
+            shape=[self.input_shape[-1].value],
+            trainable=trainable,
+            **kargs)
+
+    def call(self, inputs):
+        assert len(inputs.shape) == 4  # NHWC
+        inputs = tf.convert_to_tensor(inputs)
+        noise = tf.random_normal(
+            [tf.shape(inputs)[0], inputs.shape[1], inputs.shape[2], 1],
+            dtype=inputs.dtype)
+        return inputs + noise * tf.reshape(tf.cast(self.kernel, inputs.dtype),
+                                           [1, 1, 1, -1])
+
+
 @tdl.core.create_init_docstring
 class MSG_GeneratorHidden(tdl.core.Layer):
     @tdl.core.InputArgument
@@ -232,11 +283,19 @@ class MSG_GeneratorHidden(tdl.core.Layer):
             raise tdl.core.exceptions.ArgumentNotProvided()
         return value
 
+    @tdl.core.InputArgument
+    def add_noise(self, value):
+        '''add noise layer.'''
+        if value is None:
+            raise tdl.core.exceptions.ArgumentNotProvided()
+        return value
+
     @tdl.core.SubmodelInit
     def conv(self, kernels=None, padding='same', interpolation='nearest'):
         if kernels is None:
             kernels = (3, 3)
-        tdl.core.assert_initialized(self, 'conv', ['units', 'upsampling'])
+        tdl.core.assert_initialized(
+            self, 'conv', ['units', 'upsampling', 'add_noise'])
         model = tdl.stacked.StackedLayers()
         model.add(Upsample2D(scale=self.upsampling,
                              interpolation=interpolation))
@@ -244,13 +303,18 @@ class MSG_GeneratorHidden(tdl.core.Layer):
                 filters=self.units, kernel_size=list(kernels),
                 strides=[1, 1], padding=padding,
                 use_bias=USE_BIAS['generator']))
+        if self.add_noise:
+            model.add(NoiseLayer())
         model.add(tf_layers.LeakyReLU(LEAKY_RATE))
-        if GeneratorFeatureNorm is not None:
+        if ((GeneratorFeatureNorm is not None)
+                and (GeneratorGlobal['fnorm_hidden'])):
             model.add(GeneratorFeatureNorm())
         model.add(Conv2DLayer(
                 filters=self.units, kernel_size=list(kernels),
                 strides=[1, 1], padding=padding,
                 use_bias=USE_BIAS['generator']))
+        if self.add_noise:
+            model.add(NoiseLayer())
         return model
 
     @tdl.core.Submodel
@@ -260,6 +324,8 @@ class MSG_GeneratorHidden(tdl.core.Layer):
             model.add(tf_layers.LeakyReLU(LEAKY_RATE))
         if GeneratorFeatureNorm is not None:
             model.add(GeneratorFeatureNorm())
+        # if USE_BATCH_NORM:
+        #     model.add(tf.keras.layers.BatchNormalization())
         return model
 
     def compute_output_shape(self, input_shape):
@@ -459,7 +525,8 @@ class MSG_GeneratorModel(tdl.stacked.StackedLayers):
 class MSG_DiscriminatorModel(tdl.stacked.StackedLayers):
     @tdl.core.LazzyProperty
     def hidden_shapes(self):
-        tdl.core.assert_initialized(self, 'hidden_shapes', ['input_shape'])
+        tdl.core.assert_initialized(
+            self, 'hidden_shapes', ['input_shape', 'projections'])
         pyramid_shape = self.input_shape
         input_shapes = pyramid_shape[::-1]
         output_list = list()
@@ -555,7 +622,7 @@ class MSG_GeneratorTrainer(GeneratorTrainer):
             self, 'loss', ['batch_size', 'xsim', 'sim_pyramid', 'regularizer',
                            'pyramid_loss'])
         pred = self.discriminator(self.sim_pyramid)
-        loss = tf.keras.losses.BinaryCrossentropy()(
+        loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
                 tf.ones_like(pred), pred)
         # regularizer
         if self.regularizer is not None:
@@ -617,18 +684,21 @@ class MSG_DiscriminatorOutput(tdl.stacked.StackedLayers):
             tf_layers.LeakyReLU(LEAKY_RATE),
             tf_layers.Flatten(),
             AffineLayer(units=1),
-            tf_layers.Activation(tf.keras.activations.sigmoid)]
+            # tf_layers.Activation(tf.keras.activations.sigmoid),
+            ]
         return value
 
 
 class MSG_DiscriminatorTrainer(DiscriminatorTrainer):
     @tdl.core.OutputValue
     def real_pyramid(self, _):
+        '''Real image pyramid.'''
         tdl.core.assert_initialized(self, 'real_pyramid', ['xreal'])
         return self.model.pyramid(self.xreal)
 
     @tdl.core.OutputValue
     def sim_pyramid(self, _):
+        '''Generated image pyramid.'''
         tdl.core.assert_initialized(self, 'sim_pyramid', ['embedding'])
         return self.generator.pyramid(self.embedding)
 
@@ -644,9 +714,9 @@ class MSG_DiscriminatorTrainer(DiscriminatorTrainer):
             self, 'loss', ['real_pyramid', 'sim_pyramid', 'regularizer'])
         pred_real = self.discriminator(self.real_pyramid)
         pred_sim = self.discriminator(self.sim_pyramid)
-        loss_real = tf.keras.losses.BinaryCrossentropy()(
+        loss_real = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
                 tf.ones_like(pred_real), pred_real)
-        loss_sim = tf.keras.losses.BinaryCrossentropy()(
+        loss_sim = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
                 tf.zeros_like(pred_sim), pred_sim)
         loss = (loss_real + loss_sim)/2.0
         return loss
@@ -671,13 +741,10 @@ class MSG_GAN(BaseGAN):
     GeneratorOutput = MSG_GeneratorOutput
     GeneratorTrainer = MSG_GeneratorTrainer
 
-    def DiscriminatorBaseModel(self, **kargs):
-        tdl.core.assert_initialized(self, 'discriminator', ['generator'])
-        tdl.core.assert_initialized(
-            self.generator, 'discriminator', ['projections'])
-        return MSG_DiscriminatorModel()
+    DiscriminatorBaseModel = MSG_DiscriminatorModel
     DiscriminatorHidden = MSG_DiscriminatorHidden
     DiscriminatorTrainer = MSG_DiscriminatorTrainer
+    DiscriminatorOutput = MSG_DiscriminatorOutput
 
     @tdl.core.SubmodelInit
     def pyramid(self, interpolation='bilinear'):

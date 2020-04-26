@@ -1,23 +1,42 @@
 # exit when any command fails
 set -e
-# 1. install prereqs if not installed
-command -v virtualenv --version >/dev/null 2>&1 || {
-    echo ;
-    echo >&2 "virtualenv is not installed. Did you install the pre-requisites? (see README). Aborting...";
-    echo "To install pre-requisites, please run:";
-    echo "   python3 -m pip install --upgrade setuptools wheel virtualenv ";
-    echo "If admin is required, you can use the pip flag --user";
-    exit 1;
-}
-#if ! virtualenv --version; then
-#    # python3 -m pip install --user --upgrade setuptools wheel virtualenv
-#    exit 1
-#fi
-# export PATH=~/.local/bin:$PATH
-# 2. create virtual env
-virtualenv env -p python3
+# cleanup env and external from previous install
+rm -rf env || true
+rm -rf external || true
+
+# 1. create virtual env
+python3 -m venv env
+
+# 2. install tensorflow
 source env/bin/activate
-# 3. install hate-detector
-pip3 install tensorflow-gpu
+if [ "$1" != "" ]; then
+  if [ "$1" == "using_gpu" ]
+  then
+    echo "-----------> installing using tensorflow-gpu"
+    pip install tensorflow-gpu==1.13.1
+  else
+    echo "provided argument not recognized"
+    exit 1
+  fi
+else
+    echo "installing using tensorflow-cpu"
+    pip install tensorflow==1.13.1
+fi
+pip install tensorflow_probability==0.6.0
+deactivate
+
+# 1. install prereqs if not installed
+source env/bin/activate
+mkdir external
+cd external
+git clone https://github.com/danmar3/twodlearn.git twodlearn
+cd twodlearn
+git checkout v0.6
+pip install -e .
+cd ../../
+deactivate
+
+# 3. install project
+source env/bin/activate
 pip3 install -e .
 deactivate
