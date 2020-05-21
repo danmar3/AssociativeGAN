@@ -207,6 +207,33 @@ class VAETrainer:
                 epoch_pbar.update(1)
         return losses
 
+    def display_batch(self, batch_size=16, noise=None,
+                      batch_data=None, figsize=(10, 10),
+                      title='Generated Data', pad_value=0):
+        #if batch_data is None and noise is None:
+        #    noise = torch.randn(batch_size, self.in_channel_size, 1, 1, device=self.device)
+        #    fake_batch = self.gen_model(noise).to('cpu')
+        #elif batch_data is not None:
+        #    fake_batch = batch_data
+        #else:
+        #    # Generate fake image batch with G
+        #    fake_batch = self.gen_model(noise).to('cpu')
+
+        real_batch = next(iter(self.data_gen))
+        self.model.to(self.device)
+
+        x = real_batch[0].to('cpu')
+        torch_gan.GANTrainer.grid_display(x[:8],
+                                          figsize=(16, 16));
+        torch_gan.GANTrainer.grid_display(
+                self.model(x[:8].to(self.device))[0].reshape(-1, x.shape[1], x.shape[2], x.shape[3]).to('cpu'),
+                figsize=(16, 16));
+
+        #real_batch = next(iter(self.data_gen))
+
+        #return torch_gan.GANTrainer.grid_display(fake_batch, figsize=figsize, title=title, pad_value=pad_value)
+
+
 
 if __name__ == """__main__""":
     image_size = 64
