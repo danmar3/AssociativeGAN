@@ -12,13 +12,12 @@ source env/bin/activate
 mkdir external
 
 if [ "$1" != "" ]; then
-  if [ "$1" == "using_gpu" ]
-  then
+  if [ "$1" == "using_gpu" ]; then
     echo "-----------> installing using tensorflow-gpu"
     pip install tensorflow-gpu==1.13.1
-  if ["$1" == "using_115"]
-  then
+  elif [ "$1" == "using_115" ]; then
     cd external
+    pip install gdown
     gdown "https://drive.google.com/uc?id=1U8lk3l3sGMKFNcfx-ntccIXs8u-vGq17"
     pip install tensorflow-1.15.2-cp36-cp36m-linux_x86_64.whl
     cd ..
