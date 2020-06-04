@@ -68,7 +68,10 @@ PARAMS = {
         'gmmgan': {
             'global': {
                 'USE_BIAS': {'generator': False, 'discriminator': False},
-                'USE_BATCH_NORM': False},
+                'USE_BATCH_NORM': False,
+                'GeneratorFeatureNorm': 'vector',
+                'GeneratorGlobal': {'fnorm_hidden': True}
+                },
             'model': {
                 'embedding_size': 64,
                 'embedding': {'n_components': 100, 'min_scale_p': 0.1},
@@ -96,6 +99,7 @@ PARAMS = {
             'discriminator_trainer': {
                 'batch_size': 16,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+                'loss_type': 'simplegp'
                 },
             'encoder_trainer': {
                 'batch_size': 16,
@@ -107,7 +111,7 @@ PARAMS = {
                 'gan_steps': 200,
                 'encoder_steps': 200,
                 'embedding_steps': 50,
-                'homogenize': True,
+                'homogenize': False,
                 'reset_embedding': 5}
             }
         },
