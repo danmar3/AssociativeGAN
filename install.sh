@@ -9,11 +9,19 @@ python3 -m venv env
 
 # 2. install tensorflow
 source env/bin/activate
+mkdir external
+
 if [ "$1" != "" ]; then
   if [ "$1" == "using_gpu" ]
   then
     echo "-----------> installing using tensorflow-gpu"
     pip install tensorflow-gpu==1.13.1
+  if ["$1" == "using_115"]
+  then
+    cd external
+    gdown "https://drive.google.com/uc?id=1U8lk3l3sGMKFNcfx-ntccIXs8u-vGq17"
+    pip install tensorflow-1.15.2-cp36-cp36m-linux_x86_64.whl
+    cd ..
   else
     echo "provided argument not recognized"
     exit 1
@@ -27,13 +35,20 @@ deactivate
 
 # 1. install prereqs if not installed
 source env/bin/activate
-mkdir external
+# twodlearn
 cd external
 git clone https://github.com/danmar3/twodlearn.git twodlearn
 cd twodlearn
 git checkout v0.6
 pip install -e .
-cd ../../
+cd ../
+## progressive growing of gans
+#git clone https://github.com/tkarras/progressive_growing_of_gans.git
+#cd progressive_growing_of_gans
+#pip install -r requirements-pip.txt
+#cd ../
+# go back to root
+cd ../
 deactivate
 
 # 3. install project

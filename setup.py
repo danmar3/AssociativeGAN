@@ -15,14 +15,21 @@ DEPS_DEV = ['Sphinx', 'sphinx_rtd_theme']
 
 
 def get_dependencies():
-    tf_names = ['tensorflow-gpu', 'tensorflow', 'tf-nightly']
-    tf_installed = any([any(tfname == installed.split('==')[0]
-                            for tfname in tf_names)
+    def is_tensorflow(pkg_name):
+        tf_names = ['tensorflow-gpu', 'tensorflow', 'tf-nightly']
+        return any(tfname == pkg_name.split('==')[0] for tfname in tf_names)
+
+    tf_installed = any([is_tensorflow(installed)
                         for installed in freeze.freeze()])
     if tf_installed:
+        version = list(filter(is_tensorflow, freeze.freeze()))[0]
+        if version.split('==')[1] not in ('1.13.1', '1.15.2'):
+            print('\n[twodlearn]: '
+                  'ONLY 1.13.1 VERSION OF TENSORFLOW SUPPORTED!!!\n'
+                  'Version 1.15.2 supported only if compiled locally.')
         return DEPS
     else:
-        return DEPS + ['tensorflow']
+        return DEPS + ['tensorflow==1.13.1']
 
 
 setup(name='acgan',
