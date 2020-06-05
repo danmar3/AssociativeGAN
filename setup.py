@@ -8,7 +8,7 @@ from setuptools import setup, find_packages
 #                   pip install dist/project_name.tar.gz
 DEPS = ['pandas', 'matplotlib', 'jupyter', 'scipy',
         'attrs', 'Pillow', 'GPUtil', 'scikit-learn',
-        'opencv-python']
+        'opencv-python', 'tensorflow-gan']
 
 DEPS_DEV = ['Sphinx', 'sphinx_rtd_theme']
 
@@ -25,14 +25,14 @@ def get_dependencies():
     if tf_installed:
         name_version = list(filter(is_tensorflow, freeze.freeze()))[0]
         version = name_version.split('==')[1]
-        if version not in ('1.13.1', '1.15.2'):
+        if version not in ('1.13.1', '1.15.2', '1.15.3'):
             print('\n[twodlearn]: '
                   'ONLY 1.13.1 VERSION OF TENSORFLOW SUPPORTED!!!\n'
-                  'Version 1.15.2 supported only if compiled locally.')
+                  'Version 1.15 supported only if compiled locally.')
         if version == '1.13.1':
             DEPS = DEPS + [
                 'tensorflow-probability==0.6.0', 'tensorflow-datasets==1.2.0']
-        elif version == '1.15.2':
+        elif version in ('1.15.2', '1.15.3'):
             DEPS = DEPS + [
                 'tensorflow-probability==0.8.0', 'tensorflow-datasets==1.2.0']
         else:

@@ -18,8 +18,8 @@ if [ "$1" != "" ]; then
   elif [ "$1" == "using_115" ]; then
     cd external
     pip install gdown
-    gdown "https://drive.google.com/uc?id=1U8lk3l3sGMKFNcfx-ntccIXs8u-vGq17"
-    pip install tensorflow-1.15.2-cp36-cp36m-linux_x86_64.whl
+    gdown "https://drive.google.com/uc?id=1qUjg3kfdlK11X3mwVWsBKe4sYuAs-cqU"
+    pip install tensorflow-1.15.3-cp36-cp36m-linux_x86_64.whl
     cd ..
   else
     echo "provided argument not recognized"
