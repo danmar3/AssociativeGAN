@@ -12,7 +12,10 @@ source env/bin/activate
 mkdir external
 
 if [ "$1" != "" ]; then
-  if [ "$1" == "using_gpu" ]; then
+  if [ "$1" == "using_113" ]; then
+    echo "installing using tensorflow-cpu"
+    pip install tensorflow==1.13.1
+  elif [ "$1" == "using_113gpu" ]; then
     echo "-----------> installing using tensorflow-gpu"
     pip install tensorflow-gpu==1.13.1
   elif [ "$1" == "using_115" ]; then
@@ -26,10 +29,14 @@ if [ "$1" != "" ]; then
     exit 1
   fi
 else
-    echo "installing using tensorflow-cpu"
-    pip install tensorflow==1.13.1
+    echo "installing tensorflow 1.15.3 with cuda 10.1"
+    cd external
+    pip install gdown
+    gdown "https://drive.google.com/uc?id=1qUjg3kfdlK11X3mwVWsBKe4sYuAs-cqU"
+    pip install tensorflow-1.15.3-cp36-cp36m-linux_x86_64.whl
+    cd ..
 fi
-pip install tensorflow_probability==0.6.0
+
 deactivate
 
 # 1. install prereqs if not installed
@@ -54,3 +61,13 @@ deactivate
 source env/bin/activate
 pip3 install -e .
 deactivate
+
+
+# 4. Extras
+# source env/bin/activate
+# pip install jupyterlab
+# jupyter nbextension enable --py widgetsnbextension
+# jupyter labextension install @jupyter-widgets/jupyterlab-manager
+# pip install voila
+# # voila --enable_nbextensions=True
+# deactivate
