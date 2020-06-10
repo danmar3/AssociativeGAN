@@ -68,7 +68,8 @@ class Conv2DLayer(tdl.convnet.Conv2DLayer):
         tdl.core.assert_initialized(
             self, 'kernel', ['kernel_size', 'input_shape'])
         if initializer is None:
-            initializer = tf.keras.initializers.RandomNormal(stddev=1.0)
+            initializer = tf.compat.v1.keras.initializers\
+                            .RandomNormal(stddev=1.0)
         weight = self.add_weight(
             name='kernel',
             initializer=initializer,
@@ -86,7 +87,8 @@ class Conv1x1Proj(tdl.convnet.Conv1x1Proj):
         tdl.core.assert_initialized(
             self, 'kernel', ['units', 'input_shape'])
         if initializer is None:
-            initializer = tf.keras.initializers.RandomNormal(stddev=1.0)
+            initializer = tf.compat.v1.keras.initializers\
+                            .RandomNormal(stddev=1.0)
         kernel = self.add_weight(
             name='kernel',
             initializer=initializer,
@@ -103,7 +105,8 @@ class Conv2DTranspose(tdl.convnet.Conv2DTranspose):
         tdl.core.assert_initialized(
             self, 'kernel', ['kernel_size', 'input_shape'])
         if initializer is None:
-            initializer = tf.keras.initializers.RandomNormal(stddev=1.0)
+            initializer = tf.compat.v1.keras.initializers\
+                            .RandomNormal(stddev=1.0)
         kernel = self.add_weight(
             name='kernel',
             initializer=initializer,
@@ -124,7 +127,8 @@ class AffineLayer(tdl.dense.AffineLayer):
         tdl.core.assert_initialized(
             self, 'kernel', ['units', 'input_shape'])
         if initializer is None:
-            initializer = tf.keras.initializers.RandomNormal(stddev=1.0)
+            initializer = tf.compat.v1.keras.initializers\
+                            .RandomNormal(stddev=1.0)
         kernel = self.add_weight(
             name='kernel',
             initializer=initializer,
@@ -230,11 +234,12 @@ class Upsample2D(tdl.core.Layer):
         size = [input_shape[1] * self.scale[0],
                 input_shape[2] * self.scale[1]]
         if self.interpolation == 'nearest':
-            output = tf.image.resize_nearest_neighbor(inputs, size=size)
+            output = tf.compat.v1.image.resize_nearest_neighbor(
+                inputs, size=size)
         elif self.interpolation == 'bilinear':
-            output = tf.image.resize_bilinear(inputs, size=size)
+            output = tf.compat.v1.image.resize_bilinear(inputs, size=size)
         elif self.interpolation == 'bicubic':
-            output = tf.image.resize_bicubic(inputs, size=size)
+            output = tf.compat.v1.image.resize_bicubic(inputs, size=size)
         else:
             raise ValueError('interpolation should be nearest, bilinear or '
                              'bicubic')
@@ -395,11 +400,11 @@ class ImagePyramid(tdl.core.Layer):
     def _resize_fn(self, _):
         tdl.core.assert_initialized(self, '_resize_fn', ['interpolation'])
         if self.interpolation == 'nearest':
-            value = tf.image.resize_nearest_neighbor
+            value = tf.compat.v1.image.resize_nearest_neighbor
         elif self.interpolation == 'bilinear':
-            value = tf.image.resize_bilinear
+            value = tf.compat.v1.image.resize_bilinear
         elif self.interpolation == 'bicubic':
-            value = tf.image.resize_bicubic
+            value = tf.compat.v1.image.resize_bicubic
         return value
 
     def compute_output_shape(self, input_shape):

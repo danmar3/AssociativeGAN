@@ -109,9 +109,10 @@ class GmmEncoderTrainer(BaseTrainer):
     @tdl.core.SubmodelInit
     def optimizer(self, learning_rate, beta1=0.0):
         return {
-            'encoder': tf.train.AdamOptimizer(learning_rate, beta1=beta1),
-            'embedding': tf.train.AdamOptimizer(learning_rate),
-            'linear_disc': tf.train.AdamOptimizer(learning_rate),
+            'encoder': tf.compat.v1.train.AdamOptimizer(
+                learning_rate, beta1=beta1),
+            'embedding': tf.compat.v1.train.AdamOptimizer(learning_rate),
+            'linear_disc': tf.compat.v1.train.AdamOptimizer(learning_rate),
             }
 
     @tdl.core.InputArgument
@@ -217,7 +218,7 @@ class GmmEncoderTrainer(BaseTrainer):
                 loss = loss + embedding_kl * tf.add_n(comp_loss)
             elif comp_loss == 'kl4':
                 sparse_loss = self._loss_linear_disc()
-                sparsity = tf.placeholder(tf.float32, shape=())
+                sparsity = tf.compat.v1.placeholder(tf.float32, shape=())
                 loss = loss + sparsity * embedding_kl * sparse_loss
 
                 ref_scale = tfp.distributions.MultivariateNormalDiag(
@@ -233,7 +234,7 @@ class GmmEncoderTrainer(BaseTrainer):
             elif comp_loss == 'kl5':
                 sparse_loss = self._loss_linear_disc(
                     loc_trainable=True, scale_trainable=False)
-                sparsity = tf.placeholder(tf.float32, shape=())
+                sparsity = tf.compat.v1.placeholder(tf.float32, shape=())
                 loss = loss + sparsity * embedding_kl * tf.reduce_mean(sparse_loss)
 
                 ref_scale = tfp.distributions.MultivariateNormalDiag(

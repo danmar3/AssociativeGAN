@@ -77,7 +77,7 @@ class ExperimentGMM(object):
         self.indicator = indicator
         self.session = (tf.compat.v1.get_default_session()
                         if tf.compat.v1.get_default_session() is not None
-                        else tf.InteractiveSession())
+                        else tf.compat.v1.InteractiveSession())
 
         # init output_dir
         now = datetime.datetime.now()
@@ -95,7 +95,7 @@ class ExperimentGMM(object):
             name=dataset_name,
             batch_size=self.params['generator_trainer']['batch_size'])
         self.model = self.Model(**self.params['model'])
-        iter = dataset.make_one_shot_iterator()
+        iter = tf.compat.v1.data.make_one_shot_iterator(dataset)
         xreal = iter.get_next()
         self.trainer = tdl.core.SimpleNamespace(
             gen=self.model.generator_trainer(
@@ -108,7 +108,8 @@ class ExperimentGMM(object):
         tdl.core.variables_initializer(self.trainer.dis.variables).run()
         tdl.core.variables_initializer(self.trainer.enc.variables).run()
         # saver
-        self.saver = tf.train.Saver(tdl.core.get_variables(self.model))
+        self.saver = tf.compat.v1.train.Saver(
+            tdl.core.get_variables(self.model))
 
     def restore(self, pathname=None):
         '''Restore the weight values stored at pathname.

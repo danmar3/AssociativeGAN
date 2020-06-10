@@ -98,7 +98,7 @@ class VectorNormalizer(tdl.core.Layer):
     def call(self, inputs):
         inputs = tf.convert_to_tensor(inputs)
         moment2 = tf.reduce_mean(tf.square(inputs), axis=-1) + self.tolerance
-        return inputs*tf.rsqrt(moment2[..., tf.newaxis])
+        return inputs*tf.math.rsqrt(moment2[..., tf.newaxis])
 
 
 @tdl.core.PropertyShortcuts({'model': ['discriminator', 'generator',
@@ -116,7 +116,7 @@ class BaseTrainer(tdl.core.TdlModel):
 
     @tdl.core.SubmodelInit
     def optimizer(self, learning_rate, beta1=0.0):
-        return tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+        return tf.compat.v1.train.AdamOptimizer(learning_rate, beta1=beta1)
         # return tf.train.RMSPropOptimizer(learning_rate=learning_rate)
 
     @tdl.core.LazzyProperty

@@ -35,7 +35,7 @@ class GMM(tdl.core.layers.Layer):
                 ..., tf.newaxis]
         if constrained_loc:
             loc = tf.Variable(
-                  tf.truncated_normal(
+                  tf.random.truncated_normal(
                       shape=[self.n_components, self.n_dims],
                       mean=init_loc),
                   constraint=lambda weights: tf.where(
@@ -47,7 +47,7 @@ class GMM(tdl.core.layers.Layer):
                   trainable=trainable)
         else:
             loc = tf.Variable(
-                  tf.truncated_normal(
+                  tf.random.truncated_normal(
                       shape=[self.n_components, self.n_dims],
                       mean=init_loc),
                   trainable=trainable)
