@@ -67,14 +67,16 @@ PARAMS = {
             },
         'gmmgan': {
             'global': {
-                'USE_BIAS': {'generator': False, 'discriminator': False},
+                'USE_BIAS': {'generator': True, 'discriminator': True},
                 'USE_BATCH_NORM': False,
                 'GeneratorFeatureNorm': 'vector',
                 'GeneratorGlobal': {'fnorm_hidden': True}
                 },
             'model': {
                 'embedding_size': 64,
-                'embedding': {'n_components': 100, 'min_scale_p': 0.1},
+                'embedding': {'n_components': 100, 'min_scale_p': 0.1,
+                              'constrained_loc': True
+                              },
                 'encoder': {
                     'units': [32, 64, 64, 64],
                     'kernels': 3,
@@ -83,6 +85,7 @@ PARAMS = {
                 'generator': {
                     'init_shape': (4, 4, 512),
                     'units': [512, 512, 512, 256, 128],
+                    'add_noise': [False, True, True, True, False],
                     'outputs': 3,
                     'kernels': 3,
                     'strides': 2},
@@ -104,7 +107,7 @@ PARAMS = {
             'encoder_trainer': {
                 'batch_size': 16,
                 'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
-                'loss': {'embedding_kl': 0.05, 'use_zsim': True,
+                'loss': {'embedding_kl': 0.005, 'use_zsim': True,
                          'comp_loss': 'kl5'}
                 },
             'run': {
