@@ -41,7 +41,7 @@ def load_mnist32_3c(batch_size, split=tfds.Split.TRAIN):
         batch = tf.compat.v1.image.resize_bilinear(
             batch, size=(32, 32), align_corners=False)
         batch = (batch-127.5)/127.5
-        return batch
+        return tf.tile(batch, [1, 1, 1, 3])
     dataset, info = tfds.load(
         'mnist', with_info=True, split=split, data_dir=DATA_DIR)
     dataset = dataset.shuffle(1000).repeat()\
