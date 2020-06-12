@@ -203,7 +203,7 @@ def load_stanford_dogs(batch_size, size=128, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_cifar10(batch_size, split=tfds.Split.TRAIN):
+def load_cifar10(batch_size, split=tfds.Split.TRAIN, drop_remainder=False):
     def map_fn(batch):
         batch = tf.cast(batch['image'], tf.float32)
         batch = (batch-127.5)/127.5
@@ -212,7 +212,7 @@ def load_cifar10(batch_size, split=tfds.Split.TRAIN):
     dataset, info = tfds.load(
         'cifar10', split=tfds.Split.TRAIN, with_info=True)
     dataset = dataset.shuffle(1000).repeat()\
-                     .batch(batch_size)\
+                     .batch(batch_size, drop_remainder=drop_remainder)\
                      .map(map_fn)\
                      .prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
