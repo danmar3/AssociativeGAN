@@ -4,3 +4,4 @@ from . import params
 from . import train
 from . import saver
 from . import main
+from . import evaluate
