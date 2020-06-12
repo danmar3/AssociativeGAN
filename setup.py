@@ -10,7 +10,7 @@ DEPS = ['pandas', 'matplotlib', 'jupyter', 'scipy',
         'attrs', 'Pillow', 'GPUtil', 'scikit-learn',
         'opencv-python', 'tensorflow-gan']
 
-DEPS_DEV = ['Sphinx', 'sphinx_rtd_theme']
+DEPS_DEV = ['Sphinx', 'sphinx_rtd_theme', 'jupyterlab', 'pdf2image', 'voila']
 
 
 def get_dependencies():
