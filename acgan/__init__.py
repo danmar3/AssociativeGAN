@@ -5,3 +5,4 @@ from . import train
 from . import saver
 from . import main
 from . import evaluate
+from . import benchmark
