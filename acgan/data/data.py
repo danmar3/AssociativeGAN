@@ -60,6 +60,23 @@ def load_fashion_mnist(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
+def load_fashion_mnist_3c(batch_size, split=tfds.Split.TRAIN):
+    def map_fn(batch):
+        batch = tf.cast(batch['image'], tf.float32)
+        batch = tf.compat.v1.image.resize_bilinear(
+            batch, size=(32, 32), align_corners=False)
+        batch = (batch-127.5)/127.5
+        return tf.tile(batch, [1, 1, 1, 3])
+
+    dataset, info = tfds.load(
+        'fashion_mnist', with_info=True, split=split, data_dir=DATA_DIR)
+    dataset = dataset.shuffle(1000).repeat()\
+        .batch(batch_size)\
+        .map(map_fn)\
+        .prefetch(tf.data.experimental.AUTOTUNE)
+    return dataset
+
+
 def load_celeb_a(batch_size, split=tfds.Split.TRAIN):
     def map_fn(batch):
         batch = tf.cast(batch['image'], tf.float32)
