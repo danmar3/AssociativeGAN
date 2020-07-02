@@ -27,7 +27,7 @@ def eager_function(func):
         if not hasattr(self, '__tdl__'):
             setattr(self, '__tdl__', tdl.core.common.__TDL__(self))
         if not hasattr(self.__tdl__, func.__name__):
-            tf_kwargs = {key: tf.placeholder(
+            tf_kwargs = {key: tf.compat.v1.placeholder(
                 shape=[None] + [i for i in value.shape[1:]],
                 dtype=value.dtype)
                          for key, value in kwargs.items()}
@@ -35,7 +35,7 @@ def eager_function(func):
             setattr(self.__tdl__, func.__name__, {
                 'out': out, 'kwargs': tf_kwargs})
         tf_nodes = getattr(self.__tdl__, func.__name__)
-        session = tf.get_default_session()
+        session = tf.compat.v1.get_default_session()
         feed_dict = {tf_nodes['kwargs'][key]: value
                      for key, value in kwargs.items()}
         out_ = session.run(tf_nodes['out'], feed_dict=feed_dict)
