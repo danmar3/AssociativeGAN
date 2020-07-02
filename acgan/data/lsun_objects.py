@@ -86,11 +86,8 @@ class LsunObjects(tfds.core.GeneratorBasedBuilder):
             name=category,
             description="Images of category %s" % category,
             version=tfds.core.Version(
-                "0.1.1", {tfds.core.Experiment.S3: False}),
-            supported_versions=[
-                tfds.core.Version("3.0.0"),
-                tfds.core.Version("2.0.0"),
-            ],
+                "3.0.0",
+                "New split API (https://tensorflow.org/datasets/splits)"),
             ) for category in _CATEGORIES
         ]
 
@@ -131,7 +128,4 @@ class LsunObjects(tfds.core.GeneratorBasedBuilder):
                 os.path.join(extracted_dir, "data.mdb"))
             for idx, (_, jpeg_image) in enumerate(tfds.as_numpy(dataset)):
                 record = {"image": io.BytesIO(jpeg_image)}
-                if self.version.implements(tfds.core.Experiment.S3):
-                    yield idx, record
-                else:
-                    yield record
+                yield idx, record

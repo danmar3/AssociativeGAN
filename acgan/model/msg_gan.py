@@ -154,7 +154,7 @@ class MSGProjection(tdl.core.Layer):
         model.add(Conv2DTranspose(
             filters=projected_shape[-1],
             kernel_size=[projected_shape[0], projected_shape[1]],
-            strides=(1, 1),
+            strides=[1, 1],
             use_bias=USE_BIAS['generator']))
         model.add(tf_layers.LeakyReLU(LEAKY_RATE))
         return model

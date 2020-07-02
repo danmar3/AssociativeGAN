@@ -16,6 +16,13 @@ class DCGAN_GeneratorHidden(TransposeLayer, BatchNormalization):
             value = tf_layers.LeakyReLU(0.2)
         return value
 
+    @tdl.core.InputArgument
+    def add_noise(self, value):
+        '''add noise layer.'''
+        if value not in (False, None):
+            raise ValueError("add_noise is not available in DCGAN")
+        return value
+
     def compute_output_shape(self, input_shape=None):
         chain = [self.conv, self.batch_normalization, self.activation]
         return compute_output_shape(chain, input_shape)
