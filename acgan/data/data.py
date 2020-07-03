@@ -35,13 +35,19 @@ def load_mnist32(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_mnist32_3c(batch_size, split=tfds.Split.TRAIN):
+def load_mnist32_3c(
+        batch_size, split=tfds.Split.TRAIN, with_label=False):
     def map_fn(batch):
-        batch = tf.cast(batch['image'], tf.float32)
-        batch = tf.compat.v1.image.resize_bilinear(
-            batch, size=(32, 32), align_corners=False)
-        batch = (batch-127.5)/127.5
-        return tf.tile(batch, [1, 1, 1, 3])
+        batch_img = tf.cast(batch['image'], tf.float32)
+        batch_img = tf.compat.v1.image.resize_bilinear(
+            batch_img, size=(32, 32), align_corners=False)
+        batch_img = (batch_img-127.5)/127.5
+        batch_img = tf.tile(batch_img, [1, 1, 1, 3])
+        if with_label:
+            batch = {'label': batch['label'], 'image': batch_img}
+        else:
+            batch = batch_img
+        return batch
     dataset, info = tfds.load(
         'mnist', with_info=True, split=split, data_dir=DATA_DIR)
     dataset = dataset.shuffle(1000).repeat()\
@@ -60,13 +66,19 @@ def load_fashion_mnist(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_fashion_mnist_3c(batch_size, split=tfds.Split.TRAIN):
+def load_fashion_mnist_3c(
+        batch_size, split=tfds.Split.TRAIN, with_label=False):
     def map_fn(batch):
-        batch = tf.cast(batch['image'], tf.float32)
-        batch = tf.compat.v1.image.resize_bilinear(
-            batch, size=(32, 32), align_corners=False)
-        batch = (batch-127.5)/127.5
-        return tf.tile(batch, [1, 1, 1, 3])
+        batch_img = tf.cast(batch['image'], tf.float32)
+        batch_img = tf.compat.v1.image.resize_bilinear(
+            batch_img, size=(32, 32), align_corners=False)
+        batch_img = (batch_img-127.5)/127.5
+        batch_img = tf.tile(batch_img, [1, 1, 1, 3])
+        if with_label:
+            batch = {'label': batch['label'], 'image': batch_img}
+        else:
+            batch = batch_img
+        return batch
 
     dataset, info = tfds.load(
         'fashion_mnist', with_info=True, split=split, data_dir=DATA_DIR)
@@ -77,13 +89,19 @@ def load_fashion_mnist_3c(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_celeb_a(batch_size, split=tfds.Split.TRAIN):
+def load_celeb_a(
+        batch_size, split=tfds.Split.TRAIN, with_label=False):
     def map_fn(batch):
-        batch = tf.cast(batch['image'], tf.float32)
-        batch = tf.compat.v1.image.central_crop(batch, central_fraction=0.7)
-        batch = tf.compat.v1.image.resize_bilinear(
-            batch, size=(64, 64), align_corners=False)
-        batch = (batch-127.5)/127.5
+        batch_img = tf.cast(batch['image'], tf.float32)
+        batch_img = tf.compat.v1.image.central_crop(
+            batch_img, central_fraction=0.7)
+        batch_img = tf.compat.v1.image.resize_bilinear(
+            batch_img, size=(64, 64), align_corners=False)
+        batch_img = (batch_img-127.5)/127.5
+        if with_label:
+            batch = {'label': batch['landmarks'], 'image': batch_img}
+        else:
+            batch = batch_img
         return batch
     dataset, info = tfds.load(
         'celeb_a', with_info=True, split=split, data_dir=DATA_DIR)
@@ -94,13 +112,19 @@ def load_celeb_a(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_celeb_a_128_cropped(batch_size, split=tfds.Split.TRAIN):
+def load_celeb_a_128_cropped(
+        batch_size, split=tfds.Split.TRAIN, with_label=False):
     def map_fn(batch):
-        batch = tf.cast(batch['image'], tf.float32)
-        batch = tf.compat.v1.image.central_crop(batch, central_fraction=0.7)
-        batch = tf.compat.v1.image.resize_bilinear(
-            batch, size=(128, 128), align_corners=False)
-        batch = (batch-127.5)/127.5
+        batch_img = tf.cast(batch['image'], tf.float32)
+        batch_img = tf.compat.v1.image.central_crop(
+            batch_img, central_fraction=0.7)
+        batch_img = tf.compat.v1.image.resize_bilinear(
+            batch_img, size=(128, 128), align_corners=False)
+        batch_img = (batch_img-127.5)/127.5
+        if with_label:
+            batch = {'label': batch['landmarks'], 'image': batch_img}
+        else:
+            batch = batch_img
         return batch
     dataset, info = tfds.load(
         'celeb_a', with_info=True, split=split, data_dir=DATA_DIR)
@@ -111,13 +135,18 @@ def load_celeb_a_128_cropped(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_celeb_a_128(batch_size, split=tfds.Split.TRAIN):
+def load_celeb_a_128(
+        batch_size, split=tfds.Split.TRAIN, with_label=False):
     def map_fn(batch):
-        batch = tf.cast(batch['image'], tf.float32)
+        batch_img = tf.cast(batch['image'], tf.float32)
         # batch = tf.image.central_crop(batch, central_fraction=0.7)
-        batch = tf.compat.v1.image.resize_bilinear(
-            batch, size=(128, 128), align_corners=False)
-        batch = (batch-127.5)/127.5
+        batch_img = tf.compat.v1.image.resize_bilinear(
+            batch_img, size=(128, 128), align_corners=False)
+        batch_img = (batch_img-127.5)/127.5
+        if with_label:
+            batch = {'label': batch['landmarks'], 'image': batch_img}
+        else:
+            batch = batch_img
         return batch
     dataset, info = tfds.load(
         'celeb_a', with_info=True, split=split, data_dir=DATA_DIR)
@@ -145,12 +174,16 @@ def load_celeb_hd_512(batch_size, split=tfds.Split.TRAIN,
     return dataset
 
 
-def load_rockps(batch_size, split=tfds.Split.TRAIN):
+def load_rockps(batch_size, split=tfds.Split.TRAIN, with_label=False):
     def map_fn(batch):
-        batch = tf.cast(batch['image'], tf.float32)
-        batch = tf.compat.v1.image.resize_bilinear(
-            batch, size=(128, 128), align_corners=False)
-        batch = (batch-127.5)/127.5
+        batch_img = tf.cast(batch['image'], tf.float32)
+        batch_img = tf.compat.v1.image.resize_bilinear(
+            batch_img, size=(128, 128), align_corners=False)
+        batch_img = (batch_img-127.5)/127.5
+        if with_label:
+            batch = {'label': batch['landmarks'], 'image': batch_img}
+        else:
+            batch = batch_img
         return batch
     dataset, info = tfds.load(
         'rock_paper_scissors',
@@ -162,7 +195,7 @@ def load_rockps(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_cats_vs_dogs(batch_size, split=tfds.Split.TRAIN):
+def load_cats_vs_dogs(batch_size, split=tfds.Split.TRAIN, with_label=False):
     def map_fn(batch):
         batch = tf.cast(batch['image'], tf.float32)[tf.newaxis, ...]
         batch = tf.compat.v1.image.resize_bilinear(
@@ -179,10 +212,11 @@ def load_cats_vs_dogs(batch_size, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_stanford_dogs(batch_size, size=128, split=tfds.Split.TRAIN):
+def load_stanford_dogs(
+        batch_size, size=128, split=tfds.Split.TRAIN, with_label=False):
     '''load cropped stanford dogs'''
     def filter_fn(batch):
-        shape = tf.cast(tf.shape(batch), tf.float32)
+        shape = tf.cast(tf.shape(batch['image']), tf.float32)
         min_val = tf.math.minimum(shape[0], shape[1])
         max_val = tf.math.maximum(shape[0], shape[1])
         return (max_val/min_val) < 1.5
@@ -199,17 +233,26 @@ def load_stanford_dogs(batch_size, size=128, split=tfds.Split.TRAIN):
         shape = tf.cast(tf.shape(batch['image']), tf.float32)
         image = tf.cast(batch['image'], tf.float32)
         image = crop(image, bbox[0, ...])
+        if with_label:
+            batch = {'label': batch['label'], 'image': image}
+        else:
+            batch = image
         return image
 
     def map_resize(batch):
         # reshape
         image = tf.compat.v1.image.resize_bilinear(
-            batch[tf.newaxis, ...],
+            batch['image'][tf.newaxis, ...],
             size=(size, size),
             align_corners=False)
         # normalize
         image = (image-127.5)/127.5
-        return image[0, ...]
+        image = image[0, ...]
+        if with_label:
+            batch = {'label': batch['label'], 'image': image}
+        else:
+            batch = image
+        return
 
     dataset, info = tfds.load(
         'my_stanford_dogs', split=tfds.Split.TRAIN, with_info=True)
@@ -220,10 +263,16 @@ def load_stanford_dogs(batch_size, size=128, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_cifar10(batch_size, split=tfds.Split.TRAIN, drop_remainder=False):
+def load_cifar10(
+        batch_size, split=tfds.Split.TRAIN, with_label=False,
+        drop_remainder=False):
     def map_fn(batch):
-        batch = tf.cast(batch['image'], tf.float32)
-        batch = (batch-127.5)/127.5
+        batch_img = tf.cast(batch['image'], tf.float32)
+        batch_img = (batch_img-127.5)/127.5
+        if with_label:
+            batch = {'label': batch['label'], 'image': batch_img}
+        else:
+            batch = batch_img
         return batch
 
     dataset, info = tfds.load(
@@ -253,12 +302,16 @@ def load_lsun(batch_size, category, size=128, split=tfds.Split.TRAIN):
     return dataset
 
 
-def load_stl10(batch_size, size=128, split=tfds.Split.TRAIN):
+def load_stl10(batch_size, size=128, split=tfds.Split.TRAIN, with_label=False):
     def map_fn(batch):
-        batch = tf.cast(batch['image'], tf.float32)
-        batch = tf.compat.v1.image.resize_bilinear(
-            batch, size=(size, size), align_corners=False)
-        batch = (batch-127.5)/127.5
+        image = tf.cast(batch['image'], tf.float32)
+        image = tf.compat.v1.image.resize_bilinear(
+            image, size=(size, size), align_corners=False)
+        image = (image-127.5)/127.5
+        if with_label:
+            batch = {'label': batch['label'], 'image': image}
+        else:
+            batch = image
         return batch
     dataset, info = tfds.load(
         'stl10', with_info=True, split=split, data_dir=DATA_DIR)
