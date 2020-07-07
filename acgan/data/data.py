@@ -322,6 +322,12 @@ def load_stl10(batch_size, size=128, split=tfds.Split.TRAIN, with_label=False):
     return dataset
 
 
+def to_one_hot(dataset, n_classes):
+    return dataset.map(
+        lambda batch: {'image': batch['image'],
+                       'label': tf.one_hot(batch['label'], depth=n_classes)})
+
+
 def load(name, batch_size):
     def load_imagenet(batch_size, resolution):
         return imagenet2012.load_imagenet2012(
