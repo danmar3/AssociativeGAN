@@ -111,7 +111,7 @@ class Accuracy(tdl.core.Layer):
     from_logits = tdl.core.InputArgument.required(
         'from_logits', doc='inputs are logits.')
 
-    def call(self, inputs, labels):
+    def call(self, labels, inputs):
         if inputs.shape.as_list()[-1] == 1:
             if self.from_logits:
                 inputs = tf.nn.sigmoid(inputs)
@@ -139,17 +139,36 @@ class Estimator(tdl.core.TdlModel):
         else:
             return value
 
+    @tdl.core.SubmodelInit
+    def metrics(self, metrics=None, from_logits=False):
+        if metrics is None:
+            return dict()
+        if isinstance(metrics, (list, tuple)):
+            # build a dict using the first charactes as the name for the metric
+            metrics = {name[:3]: name for name in metrics}
+        assert isinstance(metrics, dict), \
+            'metrics should be specified using a dictionary'
+        metrics_names = {'accuracy': lambda: Accuracy(from_logits=from_logits)}
+        return {name: metrics_names[value]()
+                if isinstance(value, str) else value
+                for name, value in metrics.items()}
+
     def _evaluate_graph(self, train_x, train_y, valid_x=None, valid_y=None):
-        tdl.core.assert_initialized(self, '_evaluate_graph', ['model', 'loss'])
+        tdl.core.assert_initialized(
+            self, '_evaluate_graph', ['model', 'loss', 'metrics'])
         train_pred = self.model(train_x)
         train_loss = self.loss(train_y, train_pred)
+        train_metrics = {name: mi(train_y, train_pred)
+                         for name, mi in self.metrics.items()}
+        train = {'loss': train_loss, 'pred': train_pred,
+                 'inputs': train_x, 'labels': train_y}
+        if train_metrics:
+            train['metrics'] = train_metrics
+        else:
+            train['metrics'] = None
         if valid_x is None:
             valid = None
-        return SimpleNamespace(
-            train={'loss': train_loss, 'pred': train_pred,
-                   'inputs': train_x, 'labels': train_y},
-            valid=valid
-        )
+        return SimpleNamespace(train=train, valid=valid)
 
     @tdl.core.SubmodelInit
     def train_ops(self, train_x, train_y, valid_x=None, valid_y=None):
@@ -175,6 +194,7 @@ class Estimator(tdl.core.TdlModel):
         return tdl.optimv2.SimpleOptimizer(
             loss=ops.train['loss'],
             var_list=self.trainable_variables,
+            metrics={'ops': ops.train['metrics'], 'buffer_size': 100},
             learning_rate=learning_rate,
             **kargs)
 
