@@ -210,15 +210,6 @@ class Estimator(tdl.core.TdlModel):
         return self._get_optimizer(
             self.train_ops, learning_rate=learning_rate, **kargs)
 
-    @eager_function
-    def _evaluate(self, inputs):
-        return self.model(inputs)
-
-    @eager_function
-    def _evaluate_supervised(self, inputs, labels):
-        ops = self._evaluate_graph(train_x=inputs, train_y=labels)
-        return {'loss': ops.train['loss'], 'pred': ops.train['pred']}
-
     def fit(self, train_x, train_y, n_steps=100):
         if not tdl.core.is_property_initialized(self, 'train_ops'):
             self.build(train_x, train_y)
@@ -233,6 +224,22 @@ class Estimator(tdl.core.TdlModel):
             }
         tdl.core.assert_initialized(self, 'fit', ['optimizer'])
         self.optimizer.run(n_steps=n_steps, feed_dict=feed_tensors)
+
+    @eager_function
+    def _evaluate(self, inputs):
+        return self.model(inputs)
+
+    @eager_function
+    def _evaluate_supervised(self, inputs, labels):
+        ops = self._evaluate_graph(train_x=inputs, train_y=labels)
+        return {'loss': ops.train['loss'], 'pred': ops.train['pred'],
+                'metrics': ops.train['metrics']}
+
+    def evaluate(self, inputs, labels=None):
+        if labels is None:
+            return self._evaluate(inputs=inputs)
+        else:
+            return self._evaluate_supervised(inputs=inputs, labels=labels)
 
 
 class LinearEstimator(Estimator):
