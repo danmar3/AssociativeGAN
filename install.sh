@@ -23,11 +23,11 @@ if [ "$1" != "" ]; then
   elif [ "$1" == "using_115" ]; then
     cd external
     pip install gdown
-    if [ $OS_DISTRO == "Ubuntu"]; then
+    if [ "$OS_DISTRO" == "Ubuntu" ]; then
       echo "Found Ubuntu Distro..."
       gdown "https://drive.google.com/uc?id=1qUjg3kfdlK11X3mwVWsBKe4sYuAs-cqU"
       pip install tensorflow-1.15.3-cp36-cp36m-linux_x86_64.whl
-    elif [ $OS_DISTRO == "CentOS"]; then
+    elif [ "$OS_DISTRO" == "CentOS" ]; then
       echo "Found CentOS Distro..."
       gdown "https://drive.google.com/uc?id=1mWQOT7trTKlhoQHFWN-R_heTVkEOUUle"
       pip install tensorflow-1.15.3-cp37-cp37m-linux_x86_64.whl
@@ -41,11 +41,11 @@ else
     echo "installing tensorflow 1.15.3 with cuda 10.1"
     cd external
     pip install gdown
-    if [ $OS_DISTRO == "Ubuntu"]; then
+    if [ "$OS_DISTRO" == "Ubuntu" ]; then
       echo "Found Ubuntu Distro..."
       gdown "https://drive.google.com/uc?id=1qUjg3kfdlK11X3mwVWsBKe4sYuAs-cqU"
       pip install tensorflow-1.15.3-cp36-cp36m-linux_x86_64.whl
-    elif [ $OS_DISTRO == "CentOS"]; then
+    elif [ "$OS_DISTRO" == "CentOS" ]; then
       echo "Found CentOS Distro..."
       gdown "https://drive.google.com/uc?id=1mWQOT7trTKlhoQHFWN-R_heTVkEOUUle"
       pip install tensorflow-1.15.3-cp37-cp37m-linux_x86_64.whl
