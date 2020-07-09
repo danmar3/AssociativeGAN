@@ -1,6 +1,7 @@
 import tensorflow as tf
 import tensorflow_datasets as tfds
 from . import imagenet2012
+from . import augment
 
 DATA_DIR = None
 
@@ -265,7 +266,7 @@ def load_stanford_dogs(
 
 def load_cifar10(
         batch_size, split=tfds.Split.TRAIN, with_label=False,
-        drop_remainder=False):
+        drop_remainder=False, augment_data=False):
     def map_fn(batch):
         batch_img = tf.cast(batch['image'], tf.float32)
         batch_img = (batch_img-127.5)/127.5
@@ -278,10 +279,18 @@ def load_cifar10(
     dataset, info = tfds.load(
         'cifar10', split=split, with_info=True)
     print('loading split {}'.format(split))
-    dataset = dataset.shuffle(1000).repeat()\
-                     .batch(batch_size, drop_remainder=drop_remainder)\
-                     .map(map_fn)\
-                     .prefetch(tf.data.experimental.AUTOTUNE)
+    if augment_data:
+        print('using augmented dataset')
+        dataset = dataset.shuffle(1000).repeat()\
+            .map(augment.batch_wrapper(augment.random_crop))\
+            .batch(batch_size, drop_remainder=drop_remainder)\
+            .map(map_fn).map(augment.batch_wrapper(augment.random_flip))\
+            .prefetch(tf.data.experimental.AUTOTUNE)
+    else:
+        dataset = dataset.shuffle(1000).repeat()\
+                         .batch(batch_size, drop_remainder=drop_remainder)\
+                         .map(map_fn)\
+                         .prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
 
 
@@ -329,54 +338,53 @@ def to_one_hot(dataset, n_classes):
                        'label': tf.one_hot(batch['label'], depth=n_classes)})
 
 
-def load(name, batch_size, split=tfds.Split.TRAIN, with_label=False):
+def load(name, batch_size, split=tfds.Split.TRAIN, with_label=False, **kargs):
     def load_imagenet(batch_size, resolution):
         return imagenet2012.load_imagenet2012(
             data_dir=DATA_DIR,
             batch_size=batch_size,
             crop=True, resolution=resolution)
     loaders = {
-        'celeb_a':
-        lambda batch_size: load_celeb_a_128_cropped(
-            batch_size, split=split, with_label=with_label),
-        'imagenet_512': lambda batch_size: load_imagenet(batch_size, 512),
-        'imagenet_256': lambda batch_size: load_imagenet(batch_size, 256),
-        'imagenet_128': lambda batch_size: load_imagenet(batch_size, 128),
-        'rockps': lambda batch_size: load_rockps(
-            batch_size, split=split, with_label=with_label),
-        'cats_vs_dogs':
-        lambda batch_size: load_cats_vs_dogs(
-            batch_size, split=split, with_label=with_label),
-        'stanford_dogs':
-        lambda batch_size: load_stanford_dogs(
-            batch_size, size=128, split=split, with_label=with_label),
-        'stanford_dogs64':
-        lambda batch_size: load_stanford_dogs(
-            batch_size, size=64, split=split, with_label=with_label),
-        'cifar10': lambda batch_size: load_cifar10(
-            batch_size, split=split, with_label=with_label),
-        'lsun_dog': lambda batch_size: load_lsun(
-            batch_size, 'dog', size=128, split=split),
-        'lsun_cat': lambda batch_size: load_lsun(
-            batch_size, 'cat', size=128, split=split),
-        'lsun_cow': lambda batch_size: load_lsun(
-            batch_size, 'cow', size=128, split=split),
-        'lsun_sheep': lambda batch_size: load_lsun(
-            batch_size, 'sheep', size=128, split=split),
-        'lsun_dog64': lambda batch_size: load_lsun(
-            batch_size, 'dog', size=64, split=split),
-        'lsun_cat64': lambda batch_size: load_lsun(
-            batch_size, 'cat', size=64, split=split),
-        'lsun_cow64': lambda batch_size: load_lsun(
-            batch_size, 'cow', size=64, split=split),
-        'lsun_sheep64': lambda batch_size: load_lsun(
-            batch_size, 'sheep', size=64, split=split),
-        'mnist': lambda batch_size: load_mnist32_3c(
-            batch_size, split=split, with_label=with_label),
-        'stl10': lambda batch_size: load_stl10(
-            batch_size, size=128, split=split, with_label=with_label),
-        'stl10_64': lambda batch_size: load_stl10(
-            batch_size, size=64, split=split, with_label=with_label),
+        'celeb_a': lambda batch_size, **kargs: load_celeb_a_128_cropped(
+            batch_size, split=split, with_label=with_label, **kargs),
+        'imagenet_512': lambda batch_size, **kargs: load_imagenet(
+            batch_size, 512, **kargs),
+        'imagenet_256': lambda batch_size, **kargs: load_imagenet(
+            batch_size, 256, **kargs),
+        'imagenet_128': lambda batch_size, **kargs: load_imagenet(
+            batch_size, 128, **kargs),
+        'rockps': lambda batch_size, **kargs: load_rockps(
+            batch_size, split=split, with_label=with_label, **kargs),
+        'cats_vs_dogs': lambda batch_size, **kargs: load_cats_vs_dogs(
+            batch_size, split=split, with_label=with_label, **kargs),
+        'stanford_dogs': lambda batch_size, **kargs: load_stanford_dogs(
+            batch_size, size=128, split=split, with_label=with_label, **kargs),
+        'stanford_dogs64': lambda batch_size, **kargs: load_stanford_dogs(
+            batch_size, size=64, split=split, with_label=with_label, **kargs),
+        'cifar10': lambda batch_size, **kargs: load_cifar10(
+            batch_size, split=split, with_label=with_label, **kargs),
+        'lsun_dog': lambda batch_size, **kargs: load_lsun(
+            batch_size, 'dog', size=128, split=split, **kargs),
+        'lsun_cat': lambda batch_size, **kargs: load_lsun(
+            batch_size, 'cat', size=128, split=split, **kargs),
+        'lsun_cow': lambda batch_size, **kargs: load_lsun(
+            batch_size, 'cow', size=128, split=split, **kargs),
+        'lsun_sheep': lambda batch_size, **kargs: load_lsun(
+            batch_size, 'sheep', size=128, split=split, **kargs),
+        'lsun_dog64': lambda batch_size, **kargs: load_lsun(
+            batch_size, 'dog', size=64, split=split, **kargs),
+        'lsun_cat64': lambda batch_size, **kargs: load_lsun(
+            batch_size, 'cat', size=64, split=split, **kargs),
+        'lsun_cow64': lambda batch_size, **kargs: load_lsun(
+            batch_size, 'cow', size=64, split=split, **kargs),
+        'lsun_sheep64': lambda batch_size, **kargs: load_lsun(
+            batch_size, 'sheep', size=64, split=split, **kargs),
+        'mnist': lambda batch_size, **kargs: load_mnist32_3c(
+            batch_size, split=split, with_label=with_label, **kargs),
+        'stl10': lambda batch_size, **kargs: load_stl10(
+            batch_size, size=128, split=split, with_label=with_label, **kargs),
+        'stl10_64': lambda batch_size, **kargs: load_stl10(
+            batch_size, size=64, split=split, with_label=with_label, **kargs),
 
     }
-    return loaders[name](batch_size)
+    return loaders[name](batch_size, **kargs)
