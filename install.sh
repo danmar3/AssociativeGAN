@@ -33,6 +33,13 @@ if [ "$1" != "" ]; then
       pip install tensorflow-1.15.3-cp37-cp37m-linux_x86_64.whl
     fi
     cd ..
+  elif [ "$1" == "using_py38" ]; then
+    cd external
+    pip install gdown
+    echo "Installing tensorflow 1.15.3 for Python 3.8..."
+    gdown "https://drive.google.com/uc?id=1i3W1n8MkIlfIVFShvH2rtHfGnkBA8bpk"
+    pip install tensorflow-1.15.3-cp38-cp38-linux_x86_64.whl
+    cd ..
   else
     echo "provided argument not recognized"
     exit 1
