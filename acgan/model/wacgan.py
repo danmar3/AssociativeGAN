@@ -4,6 +4,7 @@ import twodlearn.bayesnet
 import tensorflow.keras.layers as tf_layers
 import tensorflow_probability as tfp
 from .gmm_gan import GmmGan, GmmGeneratorTrainer
+from .encoder import ResConv
 
 
 class WacGanGeneratorTrainer(GmmGeneratorTrainer):
@@ -39,3 +40,15 @@ class WacGan(GmmGan):
                 padding=padding[i], dropout=dropout))
         model.add(self.DiscriminatorOutput())
         return model
+
+
+class WacGanV2(WacGan):
+    EncoderModel = ResConv
+    @tdl.core.SubmodelInit
+    def encoder(self, units, kernels, strides, dropout=None, padding='same',
+                pooling=None, flatten='global_maxpool', res_layers=2):
+        '''CNN for recovering the encodding of a given image'''
+        return self.EncoderModel(
+            units=units, kernels=kernels, strides=strides, dropout=dropout,
+            padding=padding, pooling=pooling, flatten=flatten,
+            res_layers=res_layers)

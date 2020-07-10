@@ -12,13 +12,19 @@ from .utils import eager_function
 from .train import run_training
 from .model import msg_gan
 from .model.gmm_gan import GmmGan
-from .model.wacgan import WacGan
+from .model.wacgan import WacGan, WacGanV2
 import functools
 from sklearn.manifold import TSNE
 
 
 def normalize_image(image):
     return ((image-image.min())/(image.max()-image.min()))
+
+
+def compat_params(params):
+    if 'data' not in params:
+        params['data'] = dict()
+    return params
 
 
 class ExperimentGMM(object):
@@ -69,7 +75,8 @@ class ExperimentGMM(object):
         self._init_params(params, dataset_name)
         dataset = data.load(
             name=dataset_name,
-            batch_size=self.params['generator_trainer']['batch_size'])
+            batch_size=self.params['generator_trainer']['batch_size'],
+            **self.params['data'])
         self.model = self.Model(**self.params['model'])
         iter = tf.compat.v1.data.make_one_shot_iterator(dataset)
         xreal = iter.get_next()
@@ -360,3 +367,8 @@ class ExperimentGMM(object):
 class ExperimentWACGAN(ExperimentGMM):
     name = 'wacgan'
     Model = WacGan
+
+
+class ExperimentWACGAN_V2(ExperimentGMM):
+    name = 'wacganV2'
+    Model = WacGanV2

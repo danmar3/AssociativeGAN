@@ -72,6 +72,7 @@ PARAMS = {
                 'GeneratorFeatureNorm': 'vector',
                 'GeneratorGlobal': {'fnorm_hidden': True}
                 },
+            'data': {},
             'model': {
                 'embedding_size': 64,
                 'embedding': {'n_components': 100, 'min_scale_p': 0.1,
@@ -362,7 +363,7 @@ PARAMS['stanford_dogs']['gmmgan']['model'] = {
     'embedding_size': 256,
     'embedding': {'n_components': 50, 'min_scale_p': 0.1},
     'encoder': {
-        'units': [32, 64, 64, 64],
+        'units': [32, 64, 64, 64, 128],
         'kernels': 3,
         'strides': 1,
         'pooling': 2},
@@ -513,3 +514,32 @@ datasets = (['celeb_a', 'stanford_dogs', 'stanford_dogs64',
 
 for dataset in datasets:
     PARAMS[dataset]['wacgan'] = copy.deepcopy(PARAMS[dataset]['gmmgan'])
+
+for dataset in datasets:
+    PARAMS[dataset]['wacganV2'] = copy.deepcopy(PARAMS[dataset]['wacgan'])
+
+PARAMS['cifar10']['wacganV2']['model'] = {
+    'embedding_size': 128,
+    'embedding': {'n_components': 50, 'min_scale_p': 0.1,
+                  'constrained_loc': True},
+    'encoder': {
+        'units': [64, 128, 256, 512],
+        'kernels': 3,
+        'strides': 1,
+        'pooling': 2},
+    'generator': {
+        'init_shape': (4, 4, 512),
+        'units': [512, 512, 256],
+        'outputs': 3,
+        'kernels': 3,
+        'strides': 2},
+    'discriminator': {
+        'units': [256, 512, 512],
+        'kernels': 3,
+        'strides': 2,
+        'dropout': None}
+    }
+
+PARAMS['cifar10']['wacganV2']['data'] = {
+    'augment_data': True
+}
