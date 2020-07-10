@@ -24,3 +24,7 @@ class DcganTest(unittest.TestCase):
         output = layer(inputs)
         assert layer.bias is None
         assert output.shape.as_list() == [64, 28, 28, 3]
+
+
+if __name__ == "__main__":
+    unittest.main()
