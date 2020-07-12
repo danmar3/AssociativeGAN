@@ -6,13 +6,15 @@ import argparse
 import acgan
 import json
 import tensorflow as tf
-from acgan.main import ExperimentGMM, ExperimentWACGAN, ExperimentWACGAN_V2
+from acgan.main import (
+    ExperimentGMM, ExperimentWACGAN, ExperimentWACGAN_V2, ExperimentWACGAN_Dev)
 
 FLAGS = None
 EXPERIMENTS = {
     'gmmgan': ExperimentGMM,
     'wacgan': ExperimentWACGAN,
-    'wacganV2': ExperimentWACGAN_V2}
+    'wacganV2': ExperimentWACGAN_V2,
+    'wacganDev': ExperimentWACGAN_Dev}
 
 # python3 gmmgan_test.py --n_steps=100 --n_steps_save=5 --gpu=6 --session="tmp/gmmgan/session_20190925:0443"
 

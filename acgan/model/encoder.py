@@ -4,24 +4,7 @@ import tensorflow as tf
 import tensorflow.keras.layers as tf_layers
 from types import SimpleNamespace
 from .msg_gan import (AffineLayer, Conv2DLayer, LEAKY_RATE)
-from ..utils import eager_function
-
-
-def _to_list(value, n_elements):
-    '''check if value is a list. If not, return a list with n_elements.
-
-    If value is an integer, each element is a 2-dim tuple (value, value).
-    If value is an iterable, each element of the new list is a tuple
-    with duplicated elements (value[i], value[i]) '''
-    if isinstance(value, int):
-        value = [value]*n_elements
-    if isinstance(value[0], int) or (value[0] is None):
-        value = [[vi, vi] for vi in value]
-    assert len(value) == n_elements, \
-        'list does not have the expected number of elements'
-    assert all([len(vi) == 2 for vi in value]), \
-        'list does not have the expected number of elements'
-    return value
+from ..utils import eager_function, replicate_to_list
 
 
 class ResConv(tdl.core.Layer):
@@ -38,11 +21,11 @@ class ResConv(tdl.core.Layer):
         tdl.core.assert_initialized(self, 'layers', ['embedding_size'])
 
         n_layers = len(units)
-        kernels = _to_list(kernels, n_layers)
-        strides = _to_list(strides, n_layers)
+        kernels = replicate_to_list(kernels, n_layers)
+        strides = replicate_to_list(strides, n_layers)
         padding = (padding if isinstance(padding, (list, tuple))
                    else [padding]*n_layers)
-        pooling = _to_list(pooling, n_layers)
+        pooling = replicate_to_list(pooling, n_layers)
 
         model = tdl.stacked.StackedLayers()
         for i in range(len(units)):
@@ -218,15 +201,21 @@ class Estimator(tdl.core.TdlModel):
             )
         tdl.core.initialize_variables(self.model)
 
-    @tdl.core.Submodel
-    def trainable_variables(self, value):
-        if value is None:
+    @tdl.core.SubmodelInit(lazzy=True)
+    def trainable_variables(self, get_trainable=None):
+        if get_trainable is None:
             tdl.core.assert_initialized(
                 self, 'trainable_variables', ['train_ops'])
             value = tdl.core.get_trainable(self.model)
+        elif callable(get_trainable):
+            value = get_trainable()
+        else:
+            raise ValueError('get_trainable must be callable')
         return value
 
     def _get_optimizer(self, ops, learning_rate, **kargs):
+        tdl.core.assert_initialized(
+            self, '_get_optimizer', ['trainable_variables'])
         return tdl.optimv2.SimpleOptimizer(
             loss=ops.train['loss'],
             var_list=self.trainable_variables,

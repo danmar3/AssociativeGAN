@@ -26,3 +26,20 @@ def eager_function(func):
             out_, [out_i for out_i in nest.flatten(out_)
                    if out_i is not None])
     return wrapper
+
+
+def replicate_to_list(value, n_elements):
+    '''check if value is a list. If not, return a list with n_elements.
+
+    If value is an integer, each element is a 2-dim tuple (value, value).
+    If value is an iterable, each element of the new list is a tuple
+    with duplicated elements (value[i], value[i]) '''
+    if isinstance(value, int):
+        value = [value]*n_elements
+    if isinstance(value[0], int) or (value[0] is None):
+        value = [[vi, vi] for vi in value]
+    assert len(value) == n_elements, \
+        'list does not have the expected number of elements'
+    assert all([len(vi) == 2 for vi in value]), \
+        'list does not have the expected number of elements'
+    return value

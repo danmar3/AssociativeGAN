@@ -12,7 +12,7 @@ from .utils import eager_function
 from .train import run_training
 from .model import msg_gan
 from .model.gmm_gan import GmmGan
-from .model.wacgan import WacGan, WacGanV2
+from .model.wacgan import WacGan, WacGanV2, WacGanDev
 import functools
 from sklearn.manifold import TSNE
 
@@ -55,6 +55,19 @@ class ExperimentGMM(object):
         with open(filename, 'w') as file_h:
             json.dump(self.params, file_h)
 
+    def _init_trainer(self, xreal):
+        trainer = tdl.core.SimpleNamespace(
+            gen=self.model.generator_trainer(
+                **self.params['generator_trainer']),
+            dis=self.model.discriminator_trainer(
+                xreal=xreal, **self.params['discriminator_trainer']),
+            enc=self.model.encoder_trainer(
+                xreal=xreal, **self.params['encoder_trainer']))
+        tdl.core.variables_initializer(trainer.gen.variables).run()
+        tdl.core.variables_initializer(trainer.dis.variables).run()
+        tdl.core.variables_initializer(trainer.enc.variables).run()
+        return trainer
+
     def __init__(self, dataset_name='celeb_a', params=None, indicator=None):
         self.indicator = indicator
         self.session = (tf.compat.v1.get_default_session()
@@ -80,16 +93,8 @@ class ExperimentGMM(object):
         self.model = self.Model(**self.params['model'])
         iter = tf.compat.v1.data.make_one_shot_iterator(dataset)
         xreal = iter.get_next()
-        self.trainer = tdl.core.SimpleNamespace(
-            gen=self.model.generator_trainer(
-                **self.params['generator_trainer']),
-            dis=self.model.discriminator_trainer(
-                xreal=xreal, **self.params['discriminator_trainer']),
-            enc=self.model.encoder_trainer(
-                xreal=xreal, **self.params['encoder_trainer']))
-        tdl.core.variables_initializer(self.trainer.gen.variables).run()
-        tdl.core.variables_initializer(self.trainer.dis.variables).run()
-        tdl.core.variables_initializer(self.trainer.enc.variables).run()
+        self.trainer = self._init_trainer(xreal)
+
         # saver
         self.saver = tf.compat.v1.train.Saver(
             tdl.core.get_variables(self.model))
@@ -372,3 +377,101 @@ class ExperimentWACGAN(ExperimentGMM):
 class ExperimentWACGAN_V2(ExperimentGMM):
     name = 'wacganV2'
     Model = WacGanV2
+
+
+class ExperimentWACGAN_Dev(ExperimentGMM):
+    name = 'wacganDev'
+    Model = WacGanDev
+
+    def _init_trainer(self, xreal):
+        trainer = tdl.core.SimpleNamespace(
+            gen=self.model.generator_trainer(
+                **self.params['generator_trainer']),
+            dis=self.model.discriminator_trainer(
+                xreal=xreal, **self.params['discriminator_trainer']),
+            encoder=self.model.encoder_trainer(
+                xreal=xreal, **self.params['encoder_trainer']),
+            embedding=self.model.embedding_trainer(
+                xreal=xreal, **self.params['encoder_trainer']))
+        tdl.core.variables_initializer(trainer.gen.variables).run()
+        tdl.core.variables_initializer(trainer.dis.variables).run()
+        tdl.core.variables_initializer(trainer.encoder.variables).run()
+        tdl.core.variables_initializer(trainer.embedding.variables).run()
+        return trainer
+
+    def _train_encoder(self, encoder_steps):
+        self.trainer.encoder.optim.run(n_steps=encoder_steps)
+
+    def _train_embedding(self, embedding_steps, reset_embedding):
+        _n_steps = embedding_steps
+        reset = False
+        if reset_embedding is not False:
+            if self._global_steps % reset_embedding == 0:
+                print('--> Resetting embedding.')
+                _n_steps = reset_embedding*_n_steps
+                reset = True
+
+        def get_dict(sparsity):
+            feed_dict = None
+            sparsity_h = self.trainer.embedding.gmm['estimator']\
+                             .loss.model.sparsity
+            if isinstance(sparsity_h, tf.Tensor):
+                feed_dict = {sparsity_h: sparsity}
+            return feed_dict
+
+        if reset:
+            self.session.run(self.model.embedding.init_op)
+            feed_dict = get_dict(sparsity=0.0)
+            self.trainer.embedding.gmm['optim'].run(
+                n_steps=_n_steps, feed_dict=feed_dict)
+
+            self.trainer.embedding.linear['optim'].run(n_steps=_n_steps)
+        else:
+
+            self.trainer.embedding.linear['optim'].run(n_steps=_n_steps)
+            feed_dict = get_dict(sparsity=1.0)
+            self.trainer.embedding.gmm['optim'].run(
+                n_steps=_n_steps, feed_dict=feed_dict)
+
+    def run(self, n_steps=100, **kwargs):
+        if not kwargs:
+            kwargs = self.params['run']
+        if 'homogenize' not in kwargs:
+            kwargs['homogenize'] = False
+        if 'reset_embedding' not in kwargs:
+            kwargs['reset_embedding'] = False
+        if 'n_start' not in kwargs:
+            kwargs['n_start'] = 0
+
+        if not hasattr(self, '_global_steps'):
+            self._global_steps = 0
+
+        def train_gan():
+            if kwargs['homogenize']:
+                logits_h = self.model.embedding.logits
+                _logits = logits_h.value().eval()
+                logits = np.zeros(logits_h.shape.as_list(),
+                                  dtype=logits_h.dtype.as_numpy_dtype)
+                self._set_logits(logits=logits)
+            if not run_training(
+                    dis=self.trainer.dis, gen=self.trainer.gen,
+                    n_steps=kwargs['gan_steps'], n_logging=10,
+                    ind=self.indicator):
+                return False
+            if kwargs['homogenize']:
+                self._set_logits(logits=_logits)
+            return True
+
+        # warm up trainin the gan
+        if self._global_steps == 0:
+            if not train_gan():
+                return False
+        # train for n_steps trials
+        for trial in tqdm.tqdm(range(n_steps)):
+            if self._global_steps >= kwargs['n_start']:
+                self._train_encoder(kwargs['encoder_steps'])
+                self._train_embedding(kwargs['embedding_steps'])
+            if not train_gan():
+                return False
+            self._global_steps = self._global_steps + 1
+        return True

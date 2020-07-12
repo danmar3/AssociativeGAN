@@ -27,6 +27,9 @@ class GmmDiscriminatorTrainer(MSG_DiscriminatorTrainer):
     # Taken from
     # https://github.com/NVlabs/stylegan/blob/master/training/loss.py
     def _D_logistic_simplegp(self, r1_gamma=10.0, r2_gamma=0.0):
+        """Simplified gradient penalty
+        see https://arxiv.org/pdf/1801.04406.pdf
+        """
         real_pyramid = [tf.stop_gradient(img) for img in self.real_pyramid]
         real_scores = self.discriminator(real_pyramid)
         sim_scores = self.discriminator(self.sim_pyramid)

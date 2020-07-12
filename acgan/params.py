@@ -543,3 +543,12 @@ PARAMS['cifar10']['wacganV2']['model'] = {
 PARAMS['cifar10']['wacganV2']['data'] = {
     'augment_data': True
 }
+
+for dataset in datasets:
+    PARAMS[dataset]['wacganExp'] = copy.deepcopy(PARAMS[dataset]['wacganV2'])
+
+PARAMS['cifar10']['wacganExp']['encoder_trainer']: {
+    'batch_size': 16,
+    'optimizer': {'learning_rate': 0.0005},
+    'loss': {'embedding_kl': 0.005}
+    }
