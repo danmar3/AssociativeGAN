@@ -549,6 +549,6 @@ for dataset in datasets:
 
 PARAMS['cifar10']['wacganDev']['encoder_trainer']: {
     'batch_size': 16,
-    'optimizer': {'learning_rate': 0.0005},
+    'optimizer': {'learning_rate': 0.001},
     'loss': {'embedding_kl': 0.005}
     }

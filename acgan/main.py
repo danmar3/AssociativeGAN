@@ -470,7 +470,9 @@ class ExperimentWACGAN_Dev(ExperimentGMM):
         for trial in tqdm.tqdm(range(n_steps)):
             if self._global_steps >= kwargs['n_start']:
                 self._train_encoder(kwargs['encoder_steps'])
-                self._train_embedding(kwargs['embedding_steps'])
+                self._train_embedding(
+                    embedding_steps=kwargs['embedding_steps'],
+                    reset_embedding=kwargs['reset_embedding'])
             if not train_gan():
                 return False
             self._global_steps = self._global_steps + 1
