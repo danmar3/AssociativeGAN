@@ -75,8 +75,8 @@ class CallWrapper(tdl.core.Layer):
     model = tdl.core.Submodel.required('model', doc='wrapped model')
     call_fn = tdl.core.Submodel.required('call_fn', doc='call function')
 
-    def call(self, inputs, **kargs):
-        return self.call_fn(self.model, inputs, **kargs)
+    def call(self, inputs, *args, **kargs):
+        return self.call_fn(self.model, inputs, *args, **kargs)
 
 
 class LinearClassifier(tdl.core.Layer):
@@ -186,6 +186,9 @@ class Estimator(tdl.core.TdlModel):
             train['metrics'] = None
         if valid_x is None:
             valid = None
+        # set graph_evaluated, which indicates that the model has been
+        # evaluated, hence trainable variables are available
+        self._graph_evaluated = True
         return SimpleNamespace(train=train, valid=valid)
 
     @tdl.core.SubmodelInit
@@ -204,8 +207,8 @@ class Estimator(tdl.core.TdlModel):
     @tdl.core.SubmodelInit(lazzy=True)
     def trainable_variables(self, get_trainable=None):
         if get_trainable is None:
-            tdl.core.assert_initialized(
-                self, 'trainable_variables', ['train_ops'])
+            assert self._graph_evaluated, \
+                'model needs to be executed before extracting trainable vars.'
             value = tdl.core.get_trainable(self.model)
         elif callable(get_trainable):
             value = get_trainable()

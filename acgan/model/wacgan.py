@@ -141,22 +141,22 @@ class Conv2DBlock(tdl.core.Layer):
 
     @tdl.core.SubmodelInit(lazzy=True)
     def conv(self, filters=None, kernels=3, padding='same', BatchNorm=None):
-        tdl.core.assert_initialized(self, 'layers', ['use_bias', 'leaky_rate'])
+        tdl.core.assert_initialized(self, 'conv', ['use_bias', 'leaky_rate'])
         if filters is None:
             filters = [None, None]
         kernels = replicate_to_list(kernels, len(filters))
-        layers = list()
+        layers = tdl.stacked.StackedLayers()
         for idx in range(len(filters)):
             kargs = {'filters': filters[idx]} if filters[idx] else {}
-            layers.append(
+            layers.add(
                 Conv2DLayer(
                     kernel_size=kernels[idx], strides=[1, 1],
                     padding=padding,
                     use_bias=self.use_bias,
                     **kargs))
             if BatchNorm:
-                layers.append(BatchNorm())
-            layers.append(
+                layers.add(BatchNorm())
+            layers.add(
                 tf_layers.LeakyReLU(self.leaky_rate))
         return layers
 
@@ -177,6 +177,16 @@ class Conv2DBlock(tdl.core.Layer):
         else:
             return None
 
+    def compute_output_shape(self, input_shape):
+        tdl.core.assert_initialized(
+            self, 'compute_output_shape', ['conv', 'pooling', 'dropout'])
+        output_shape = self.conv.compute_output_shape(input_shape)
+        if self.pooling:
+            output_shape = self.pooling.compute_output_shape(output_shape)
+        if self.dropout:
+            output_shape = self.dropout.compute_output_shape(output_shape)
+        return output_shape
+
     def call(self, inputs, **kargs):
         value = self.conv(inputs)
         if self.pooling:
@@ -187,6 +197,9 @@ class Conv2DBlock(tdl.core.Layer):
 
 
 class Discriminator(tdl.core.Layer):
+    units = tdl.core.InputArgument.required(
+        'units', doc='number of units in each hidden block of the network')
+
     @tdl.core.LazzyProperty
     def hidden_shapes(self):
         tdl.core.assert_initialized(
@@ -195,10 +208,10 @@ class Discriminator(tdl.core.Layer):
         input_shapes = pyramid_shape[::-1]
         output_list = list()
         proj_shape = self.projections[0].compute_output_shape(input_shapes[0])
-        output_shape = self.layers[0].compute_output_shape(proj_shape)
+        output_shape = self.hidden[0].compute_output_shape(proj_shape)
         output_list.append(output_shape)
         for x_shape, projection, layer in\
-                zip(input_shapes[1:], self.projections[1:], self.layers[1:]):
+                zip(input_shapes[1:], self.projections[1:], self.hidden[1:]):
             proj_shape = projection.compute_output_shape(x_shape)
             extended = proj_shape[:-1].concatenate(
                 proj_shape[-1].value + output_shape[-1].value)
@@ -209,11 +222,11 @@ class Discriminator(tdl.core.Layer):
     @tdl.core.SubmodelInit(lazzy=True)
     def projections(self, init_units=None, activation=None):
         tdl.core.assert_initialized(
-            self, 'projections', ['layers', 'input_shape'])
+            self, 'projections', ['units', 'hidden', 'input_shape'])
         projections = list()
         if init_units is None:
-            init_units = self.layers[0].units//2
-        units_list = [init_units] + [layer.units for layer in self.layers[:-1]]
+            init_units = self.units[0]//2
+        units_list = [init_units] + [ui for ui in self.units]
         for units in units_list:
             projections.append(
                 Conv1x1Proj(
@@ -224,33 +237,34 @@ class Discriminator(tdl.core.Layer):
         return projections
 
     @tdl.core.SubmodelInit(lazzy=True)
-    def hidden(self, units, kernels, strides, dropout=None, padding='same'):
-        n_layers = len(units)
+    def hidden(self, kernels, strides, dropout=None, padding='same'):
+        tdl.core.assert_initialized(self, 'hidden', ['units'])
+        n_layers = len(self.units)
         kernels = replicate_to_list(kernels, n_layers)
         strides = replicate_to_list(strides, n_layers)
         padding = (padding if isinstance(padding, (list, tuple))
                    else [padding]*n_layers)
 
         model = list()
-        for i in range(len(units)):
+        for i in range(len(self.units)):
             model.append(Conv2DBlock(
-                conv={'filters': [units[i], units[i]],
+                conv={'filters': [self.units[i], self.units[i]],
                       'kernels': kernels[i],
                       'padding': padding[i]},
                 pooling={'size': strides[i]},
                 dropout={'rate': dropout},
                 use_bias=USE_BIAS['discriminator'],
                 leaky_rate=LEAKY_RATE))
-        model.append(self.MinibatchStddev())
+        model.append(MinibatchStddev())
         model.append(Conv2DBlock(
-            layers={'kernels': [3, 4], 'padding': 'same'},
+            conv={'kernels': [3, 4], 'padding': 'same'},
             use_bias=USE_BIAS['discriminator'],
             leaky_rate=LEAKY_RATE))
         return model
 
     @tdl.core.SubmodelInit(lazzy=True)
     def dense(self, **kargs):
-        return tdl.core.StackedLayers(layers=[
+        return tdl.stacked.StackedLayers(layers=[
             tf_layers.Flatten(),
             AffineLayer(units=1)])
 
@@ -283,7 +297,8 @@ class WacGanV3(WacGanV2):
     def discriminator(self, units, kernels, strides, dropout=None,
                       padding='same'):
         return Discriminator(
-            hidden={'units': units, 'kernels': kernels, 'strides': strides,
+            units=units,
+            hidden={'kernels': kernels, 'strides': strides,
                     'dropout': dropout, 'padding': padding})
 
     def encoder_trainer(self, batch_size, xreal, optimizer=None, **kwargs):
@@ -328,7 +343,7 @@ class WacGanV3(WacGanV2):
                     reg_scale=kwargs['loss']['embedding_kl'],
                     linear_disc=self.linear_disc
                 ),
-                call_fn=lambda model, x: model(x[0], x[1])),
+                call_fn=lambda model, _, x: model(x[0], x[1])),
             model=CallWrapper(
                 model=self.embedding,
                 call_fn=lambda model, x: x)
