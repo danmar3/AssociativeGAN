@@ -552,3 +552,11 @@ PARAMS['cifar10']['wacganDev']['encoder_trainer']: {
     'optimizer': {'learning_rate': 0.001},
     'loss': {'embedding_kl': 0.005}
     }
+
+PARAMS['cifar10']['wacganDev']['run'] = {
+    'gan_steps': 200,
+    'encoder_steps': 1500,
+    'embedding_steps': 500,
+    'homogenize': False,
+    'reset_embedding': 5
+    }

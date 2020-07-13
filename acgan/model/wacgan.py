@@ -82,10 +82,13 @@ class EmbeddingLoss(tdl.core.Layer):
         'reg_scale', doc='scale regularization loss.')
     linear_disc = tdl.core.Submodel.required(
         'linear_disc', doc='linear discriminant to improve sparsity.')
-    sparsity = tdl.core.Submodel.optional(
-        'sparsity', doc='weight for sparcity loss',
-        default=tf.compat.v1.placeholder(tf.float32, shape=())
-    )
+
+    @tdl.core.Submodel
+    def sparsity(self, value):
+        'weight for sparcity loss. Ussually 1/0 for enable/disable it'
+        if value is None:
+            value = tf.compat.v1.placeholder(tf.float32, shape=())
+        return value
 
     def _loss_linear_disc(self, loc_trainable=True, scale_trainable=True):
         samp = tf.stack([
@@ -322,9 +325,9 @@ class WacGanV3(WacGanV2):
 
     def embedding_trainer(self, batch_size, xreal, optimizer=None, **kwargs):
         tdl.core.assert_initialized(
-            self, 'encoder_trainer',
+            self, 'embedding_trainer',
             ['generator', 'discriminator', 'noise_rate', 'pyramid',
-             'embedding', 'encoder'])
+             'embedding', 'encoder', 'linear_disc'])
 
         if optimizer is None:
             optimizer = dict()
