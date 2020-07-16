@@ -282,7 +282,9 @@ def load_cifar10(
     if augment_data:
         print('using augmented dataset')
         dataset = dataset.shuffle(1000).repeat()\
-            .map(augment.batch_wrapper(augment.random_crop))\
+            .map(augment.batch_wrapper(
+                lambda x: augment.random_crop(
+                    x, resize_size=(36, 36), crop_size=(32, 32))))\
             .batch(batch_size, drop_remainder=drop_remainder)\
             .map(map_fn).map(augment.batch_wrapper(augment.random_flip))\
             .prefetch(tf.data.experimental.AUTOTUNE)

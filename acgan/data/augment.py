@@ -1,15 +1,20 @@
 import tensorflow as tf
 
 
-def random_crop(input_img):
+def random_crop(input_img, resize_size=None, crop_size=None):
     ''' Randomly chooses if resize and crop image at a random position.
     '''
+    if resize_size is None:
+        resize_size = (36, 36)
+    if crop_size is None:
+        crop_size = (32, 32)
+
     def random_resize_crop(input):
         image = tf.image.resize(
             input[tf.newaxis, ...],
-            size=(40, 40),
+            size=resize_size,
             method=tf.image.ResizeMethod.BILINEAR)
-        return tf.image.random_crop(image[0, ...], size=(32, 32, 3))
+        return tf.image.random_crop(image[0, ...], size=list(crop_size) + [3])
 
     image = tf.cast(input_img, tf.float32)
     image = tf.cond(
