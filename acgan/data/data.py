@@ -266,7 +266,14 @@ def load_stanford_dogs(
 
 def load_cifar10(
         batch_size, split=tfds.Split.TRAIN, with_label=False,
-        drop_remainder=False, augment_data=False):
+        drop_remainder=False, augment_data=False, crop_method='resize',
+        crop_kargs=None):
+    if crop_kargs is None:
+        if crop_method == 'resize':
+            crop_kargs = {'resize_size': (40, 40), 'crop_size': (32, 32)}
+        if crop_method == 'pad':
+            crop_kargs = {'pad_size': (4, 4), 'crop_size': (32, 32)}
+
     def map_fn(batch):
         batch_img = tf.cast(batch['image'], tf.float32)
         batch_img = (batch_img-127.5)/127.5
@@ -276,15 +283,21 @@ def load_cifar10(
             batch = batch_img
         return batch
 
+    def random_crop(image):
+        if crop_method == 'resize':
+            return augment.random_resize_crop(image, **crop_kargs)
+        elif crop_method == 'pad':
+            return augment.random_resize_pad(image, **crop_kargs)
+        else:
+            raise ValueError(f'crop method {crop_method} not recognized')
+
     dataset, info = tfds.load(
         'cifar10', split=split, with_info=True)
     print('loading split {}'.format(split))
     if augment_data:
         print('using augmented dataset')
         dataset = dataset.shuffle(1000).repeat()\
-            .map(augment.batch_wrapper(
-                lambda x: augment.random_crop(
-                    x, resize_size=(36, 36), crop_size=(32, 32))))\
+            .map(augment.batch_wrapper(random_crop))\
             .batch(batch_size, drop_remainder=drop_remainder)\
             .map(map_fn).map(augment.batch_wrapper(augment.random_flip))\
             .prefetch(tf.data.experimental.AUTOTUNE)
