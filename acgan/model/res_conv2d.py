@@ -41,32 +41,37 @@ class Conv2DBlock(tdl.core.Layer):
         return value
 
     @tdl.core.SubmodelInit
-    def BatchNormClass(self, method='batchnorm'):
+    def batchnorm(self, method='batchnorm'):
         if isinstance(method, str):
             method = BATCHNORM_TYPES[method]
         return method
 
     @tdl.core.SubmodelInit(lazzy=True)
-    def upsample(self, method='bilinear', layer=None, size=2, data_format=None):
-        if layer is None:
+    def upsample(self, method='bilinear', layers=None, size=2, data_format=None):
+        def upsampling():
+            return tf_layers.UpSampling2D(
+                size=size, data_format=data_format, interpolation=method)
+
+        if layers is None:
             method = None
         elif method in ('nearest, bilinear'):
-            method = tf_layers.UpSampling2D(
-                size=size, data_format=data_format, interpolation=method)
-        return SimpleNamespace(method=method, layer=layer)
+            method = upsampling
+        if isinstance(layers, int):
+            layers = [layers]
+        return SimpleNamespace(method=method, layers=layers)
 
     @tdl.core.SubmodelInit(lazzy=True)
     def conv(self, filters=None, kernels=3, padding='same'):
         tdl.core.assert_initialized(
             self, 'conv', ['use_bias', 'leaky_rate',
-                           'Conv2DClass', 'BatchNormClass'])
+                           'Conv2DClass', 'batchnorm'])
         if filters is None:
             filters = [None, None]
         kernels = replicate_to_list(kernels, len(filters))
         layers = tdl.stacked.StackedLayers()
         for idx in range(len(filters)):
-            if self.BatchNormClass:
-                layers.add(self.BatchNormClass())
+            if self.batchnorm:
+                layers.add(self.batchnorm())
 
             layers.add(
                 tf_layers.LeakyReLU(self.leaky_rate))
@@ -127,6 +132,15 @@ class ResBlock(ResConv2D):
         'equalized', doc="use equalized version of conv layers",
         default=False)
 
+    @tdl.core.InputArgument
+    def batchnorm(self, value):
+        """batch normalization method. Defaults to batchnorm."""
+        if value is None:
+            return None
+        elif isinstance(value, dict):
+            return value['method']
+        return value
+
     DEFAULT_RESIZE = {'upsample': 'bilinear',
                       'downsample': 'avg_pool',
                       'resize': 'bilinear'}
@@ -151,16 +165,24 @@ class ResBlock(ResConv2D):
                 return convnet.Conv1x1Proj(units=output_units)
 
     @tdl.core.SubmodelInit(lazzy=True)
-    def residual(self, conv=None, pooling=None, upsample=None, **kargs):
+    def residual(self, conv=None, pooling=None, upsample=None,
+                 batchnorm='batchnorm', **kargs):
         tdl.core.assert_initialized(
             self, 'residual', ['use_bias', 'equalized'])
+        # conv arg
         if conv is None:
             conv = {}
+        # batchnorm arg
+        if self.batchnorm is not None:
+            batchnorm = self.batchnorm
 
+        # build residual
         return Conv2DBlock(
             conv=conv, pooling=pooling, upsample=upsample,
             use_bias=self.use_bias,
             equalized=self.equalized,
+            batchnorm=(batchnorm if isinstance(batchnorm, dict)
+                       else {'method': batchnorm}),
             **kargs)
 
     def _resize_operation(self):
@@ -200,6 +222,203 @@ class ResBlock(ResConv2D):
         return shortcut + residual
 
 
+class ResBlockPreAct(ResBlock):
+    @tdl.core.SubmodelInit(lazzy=True)
+    def pre_activation(self, enable=True, batchnorm='batchnorm',
+                       leaky_rate=0.2):
+        tdl.core.assert_initialized(self, 'pre_activation', ['batchnorm'])
+        # batchnorm arg
+        if self.batchnorm is not None:
+            batchnorm = self.batchnorm
+        if isinstance(batchnorm, dict):
+            batchnorm = batchnorm['method']
+        if isinstance(batchnorm, str):
+            batchnorm = BATCHNORM_TYPES[batchnorm]
+
+        if enable:
+            layers = tdl.stacked.StackedLayers()
+            if batchnorm:
+                layers.add(batchnorm())
+            layers.add(tf_layers.LeakyReLU(leaky_rate))
+            return layers
+        else:
+            return None
+
+    @tdl.core.SubmodelInit(lazzy=True)
+    def residual(self, conv=None, pooling=None, upsample=None,
+                 batchnorm='batchnorm', **kargs):
+        """residual network.
+        Args:
+            conv: dict{'filters': list(int), 'kernels': list(int)}
+            pooling: dict{size: int, method: str}
+            upsample: dict{method: str, layers: list(int)}
+            batchnorm: str | dict{method: str}
+        """
+        tdl.core.assert_initialized(
+            self, 'residual', ['use_bias', 'equalized', 'pre_activation'])
+        # conv arg
+        if conv is None:
+            conv = {'filters': [None, None]}
+        conv['kernels'] = replicate_to_list(
+            conv['kernels'], len(conv['filters']))
+        # batchnorm arg
+        if self.batchnorm is not None:
+            batchnorm = self.batchnorm
+
+        # build residual
+        if self.pre_activation:
+            layers = tdl.stacked.StackedLayers()
+
+            conv2d_type = (equalized.Conv2DLayer if self.equalized
+                           else tf_layers.Conv2D)
+            layers.add(conv2d_type(
+                filters=conv['filters'][0],
+                kernel_size=conv['kernels'][0],
+                padding='same',
+                use_bias=self.use_bias
+            ))
+
+            if isinstance(upsample, dict) and ('layers' in upsample):
+                if isinstance(upsample['layers'], int):
+                    upsample['layers'] = [upsample['layers']]
+                upsample['layers'] = [
+                    max(0, li-1) for li in upsample['layers']]
+
+            if conv['filters'][1:]:
+                layers.add(Conv2DBlock(
+                    conv={'filters': conv['filters'][1:],
+                          'kernels': conv['kernels'][1:]},
+                    pooling=pooling, upsample=upsample,
+                    use_bias=self.use_bias,
+                    equalized=self.equalized,
+                    batchnorm=(batchnorm if isinstance(batchnorm, dict)
+                               else {'method': batchnorm}),
+                    **kargs))
+            return layers
+
+        return Conv2DBlock(
+            conv=conv, pooling=pooling, upsample=upsample,
+            use_bias=self.use_bias,
+            equalized=self.equalized,
+            batchnorm=(batchnorm if isinstance(batchnorm, dict)
+                       else {'method': batchnorm}),
+            **kargs)
+
+    def call(self, inputs):
+        if self.pre_activation:
+            inputs = self.pre_activation(inputs)
+
+        residual = self.residual(inputs)
+
+        if self.upsample is not None:
+            resized = self.upsample(inputs)
+            shortcut = self.projection(resized)
+        elif self.downsample is not None:
+            projection = self.projection(inputs)
+            shortcut = self.downsample(projection)
+        elif self.resize is not None:
+            if self._resize_operation() == 'upsample':
+                resized = self.resize(inputs)
+                shortcut = self.projection(resized)
+            elif self._resize_operation() == 'downsample':
+                projection = self.projection(inputs)
+                shortcut = self.resize(projection)
+            else:
+                raise ValueError('resize operation is a mix of upsampling and '
+                                 'downsampling.')
+        else:
+            shortcut = inputs
+
+        return shortcut + residual
+
+
+class ResStages(tdl.stacked.StackedLayers):
+    stages = tdl.core.InputArgument.optional(
+        'stages', doc='number of stages.', default=1)
+    units = tdl.core.InputArgument.required(
+        'units', doc='number of output units')
+    batchnorm = tdl.core.InputArgument.optional(
+        'batchnorm', doc='batch normalization to use.', default=None)
+    kernel_size = tdl.core.InputArgument.optional(
+        'kernel_size', doc='kernel size.', default=3)
+    leaky_rate = tdl.core.InputArgument.optional(
+        'leaky_rate', doc='leaky rate', default=0.2)
+    dropout = tdl.core.InputArgument.optional(
+        'dropout', doc='dropout rate', default=None)
+    use_bias = tdl.core.InputArgument.optional(
+        'use_bias', doc='use bias', default=True)
+    equalized = tdl.core.InputArgument.optional(
+        'equalized', doc="use equalized version of conv layers",
+        default=False)
+
+    @tdl.core.InputArgument
+    def pooling(self, value):
+        tdl.core.assert_initialized(self, 'pooling', ['stages'])
+        if value is None:
+            return [{'size': None} for _ in range(self.stages)]
+        if isinstance(value, int):
+            return [{'size': value if idx == 0 else None}
+                    for idx in range(self.stages)]
+        if isinstance(value, dict):
+            pooling_size = value['size']
+            del value['size']
+            return [{**value, **{'size': pooling_size if idx == 0 else None}}
+                    for idx in range(len(self.units))]
+        raise ValueError('pooling should be either an int or a dict.')
+
+    @tdl.core.SubmodelInit(lazzy=True)
+    def layers(self, **kargs):
+        tdl.core.assert_initialized(
+            self, 'layers', ['stages', 'units', 'kernel_size', 'leaky_rate',
+                             'pooling', 'dropout', 'batchnorm', 'use_bias',
+                             'equalized'])
+        layers = list()
+        for idx in range(self.stages):
+            layers.append(ResBlockPreAct(
+                pre_activation={'enable': True if idx == 0 else False},
+                residual={
+                    'conv': {
+                        'filters': [self.units, self.units],
+                        'kernels': self.kernel_size},
+                    'leaky_rate': self.leaky_rate,
+                    'pooling': self.pooling[idx],
+                    'dropout': {'rate': self.dropout},
+                    },
+                batchnorm={'method': self.batchnorm},
+                use_bias=self.use_bias,
+                equalized=self.equalized,
+                **kargs))
+        return layers
+
+
+class ResStages101(ResStages):
+    """
+    https://arxiv.org/pdf/1603.05027.pdf
+    https://github.com/KaimingHe/resnet-1k-layers/blob/master/resnet-pre-act.lua
+    """
+    def layers(self, **kargs):
+        tdl.core.assert_initialized(
+            self, 'layers', ['stages', 'units', 'kernel_size', 'leaky_rate',
+                             'pooling', 'dropout', 'batchnorm', 'use_bias',
+                             'equalized'])
+        layers = list()
+        for idx in range(self.stages):
+            layers.append(ResBlockPreAct(
+                pre_activation={'enable': True if idx == 0 else False},
+                residual={
+                    'conv': {
+                        'filters': [self.units//4, self.units//4, self.units],
+                        'kernels': [1, self.kernel_size, 1]},
+                    'leaky_rate': self.leaky_rate,
+                    'pooling': {'size': (self.pooling_size if idx == 0 else None)},
+                    'dropout': {'rate': self.dropout},
+                    },
+                batchnorm={'method': self.batchnorm},
+                use_bias=self.use_bias,
+                equalized=self.equalized,
+                **kargs))
+
+
 class ResNet(tdl.core.Layer):
     use_bias = tdl.core.InputArgument.optional(
         'use_bias', doc='use bias', default=True)
@@ -211,44 +430,61 @@ class ResNet(tdl.core.Layer):
     leaky_rate = tdl.core.InputArgument.optional(
         'leaky_rate', doc='leaky rate', default=0.2)
 
-    units = tdl.core.InputArgument.required()
-
     @tdl.core.SubmodelInit(lazzy=True)
-    def hidden(self, kernels, strides, dropout=None, padding='same', batchnorm=None):
+    def hidden(self, units, pooling=None, kernels=3,
+               dropout=None, batchnorm=None):
+        """hidden layers
+        Args:
+            units: list(int) with n_layers elements.
+            pooling: int | None | list(int|None) with n_layers elements.
+            kernels: int | list(int) with n_layers elements.
+            batchnorm: str | None.
+        """
         tdl.core.assert_initialized(
-            self, 'hidden', ['units', 'equalized', 'use_bias', 'leaky_rate'])
-        n_layers = len(self.units)
-        kernels = replicate_to_list(kernels, n_layers)
-        strides = replicate_to_list(strides, n_layers)
-        padding = (padding if isinstance(padding, (list, tuple))
-                   else [padding]*n_layers)
+            self, 'hidden', ['equalized', 'use_bias', 'leaky_rate'])
+        n_layers = len(units)
+        # kernels arg
+        assert isinstance(kernels, (int, list, tuple))
+        if isinstance(kernels, int):
+            kernels = [kernels for _ in range(n_layers)]
+        assert all(isinstance(ki, int) for ki in kernels)
+        # pooling arg
+        assert (isinstance(pooling, (int, list, tuple)) or (pooling is None))
+        if isinstance(pooling, (int, dict)):
+            pooling = [pooling for _ in range(n_layers)]
+        assert all(isinstance(pi, (int, dict)) or (pi is None)
+                   for pi in pooling)
 
-        model = tdl.staked.StackedLayers()
-        for i in range(len(self.units)):
-            model.add(ResBlock(
-                residual={
-                    'conv': {
-                        'filters': [self.units[i], self.units[i]],
-                        'kernels': kernels[i],
-                        'padding': padding[i]},
-                    'BatchNormClass': {'method': batchnorm},
-                    'leaky_rate': self.leaky_rate,
-                    'pooling': {'size': strides[i]},
-                    'dropout': {'rate': dropout},
-                    },
+        model = tdl.stacked.StackedLayers()
+        for i in range(len(units)):
+            model.add(ResStages(
+                stages=1,
+                units=units[i],
+                kernel_size=kernels[i],
+                batchnorm=batchnorm,
+                leaky_rate=self.leaky_rate,
+                pooling=pooling[i],
+                dropout=dropout,
                 use_bias=self.use_bias,
-                equalized=self.equalized))
+                equalized=self.equalized
+                ))
         return model
 
     @tdl.core.SubmodelInit(lazzy=True)
-    def flatten(self, method='global_maxpool', activation=True):
-        layers = tdl.staked.StackedLayers()
+    def flatten(self, method='global_maxpool', batchnorm=None, activation=True):
+        layers = tdl.stacked.StackedLayers()
+        if batchnorm:
+            if isinstance(batchnorm, str):
+                batchnorm = BATCHNORM_TYPES[batchnorm]
+            layers.add(batchnorm())
         if activation:
             layers.add(tf_layers.LeakyReLU(self.leaky_rate))
         if method == 'flatten':
             layers.add(tf_layers.Flatten())
         elif method == 'global_maxpool':
             layers.add(tf_layers.GlobalMaxPooling2D())
+        elif method == 'global_avgpool':
+            layers.add(tf_layers.GlobalAveragePooling2D())
         else:
             raise ValueError(f'flatten option {method} not recognized')
         return layers
@@ -256,6 +492,8 @@ class ResNet(tdl.core.Layer):
     @tdl.core.SubmodelInit(lazzy=True)
     def dense(self, units, batchnorm=None):
         tdl.core.assert_initialized(self, 'dense', ['equalized', 'leaky_rate'])
+        if not units:
+            return None
         if isinstance(units, int):
             units = [units]
         if isinstance(batchnorm, str):
@@ -263,7 +501,7 @@ class ResNet(tdl.core.Layer):
         dense_layer = (equalized.AffineLayer if self.equalized
                        else tf_layers.Dense)
 
-        layers = tdl.staked.StackedLayers()
+        layers = tdl.stacked.StackedLayers()
         for ui in units[:-1]:
             if batchnorm is not None:
                 layers.add(batchnorm())
@@ -272,6 +510,7 @@ class ResNet(tdl.core.Layer):
         if batchnorm is not None:
             layers.add(batchnorm())
         layers.add(dense_layer(units=units[-1]))
+        return layers
 
     def compute_output_shape(self, input_shape):
         tdl.core.assert_initialized(
@@ -283,5 +522,16 @@ class ResNet(tdl.core.Layer):
             output_shape = self.dense.compute_output_shape(output_shape)
         return output_shape
 
-    def call(self, inputs):
-        pass
+    def call(self, inputs, output='dense'):
+        out = self.hidden(inputs)
+        if output == 'hidden':
+            return out
+        if self.flatten:
+            out = self.flatten(out)
+        if output == 'flatten':
+            return out
+        if self.dense:
+            out = self.dense(out)
+        if output == 'dense':
+            return out
+        raise ValueError(f'option {output} not recognized as valid output.')

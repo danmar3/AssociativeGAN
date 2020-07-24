@@ -3,7 +3,7 @@ import twodlearn.bayesnet
 import tensorflow as tf
 import tensorflow.keras.layers as tf_layers
 from types import SimpleNamespace
-from .msg_gan import (AffineLayer, Conv2DLayer, LEAKY_RATE)
+from .msg_gan import (AffineLayer, Conv2DLayer, LEAKY_RATE, VectorNormalizer)
 from ..utils import eager_function, replicate_to_list
 
 
