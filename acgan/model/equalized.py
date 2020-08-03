@@ -1,5 +1,8 @@
+from types import SimpleNamespace
+
 import twodlearn as tdl
 import tensorflow as tf
+import tensorflow.keras.layers as tf_layers
 
 
 class Conv2DLayer(tdl.convnet.Conv2DLayer):
@@ -87,3 +90,18 @@ class AffineLayer(tdl.dense.AffineLayer):
             **kargs)
         fan_in, fan_out = tdl.core.initializers.compute_fans(kernel.shape)
         return kernel * tf.sqrt(2.0/(fan_in.value + fan_out.value))
+
+
+def get_layer_lib(lib_name='keras'):
+    if lib_name == 'keras':
+        return SimpleNamespace(
+            Conv1x1Proj=tdl.convnet.Conv1x1Proj,
+            Conv2D=tf_layers.Conv2D,
+            Dense=tf_layers.Dense)
+    elif lib_name == 'equalized':
+        return SimpleNamespace(
+            Conv1x1Proj=Conv1x1Proj,
+            Conv2D=Conv2DLayer,
+            Dense=AffineLayer)
+    else:
+        raise ValueError(f'unrecognized lib_name {lib_name}')
