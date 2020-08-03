@@ -132,6 +132,12 @@ class ResBlock(ResConv2D):
         'equalized', doc="use equalized version of conv layers",
         default=False)
 
+    PROJECTION_TYPE = {
+        'conv1x1',
+        'drop'
+        'concat'
+    }
+
     @tdl.core.InputArgument
     def batchnorm(self, value):
         """batch normalization method. Defaults to batchnorm."""
@@ -146,7 +152,9 @@ class ResBlock(ResConv2D):
                       'resize': 'bilinear'}
 
     @tdl.core.SubmodelInit(lazzy=True)
-    def projection(self, units=None, use_bias=False, channel_dim=-1):
+    def projection(self, units=None,
+                   on_increment='conv1x1', on_decrement='conv1x1',
+                   use_bias=False, channel_dim=-1):
         tdl.core.assert_initialized(
             self, 'projection', ['input_shape', 'residual', 'equalized'])
         input_shape = self.input_shape
@@ -396,11 +404,15 @@ class ResStages101(ResStages):
     https://arxiv.org/pdf/1603.05027.pdf
     https://github.com/KaimingHe/resnet-1k-layers/blob/master/resnet-pre-act.lua
     """
+    stages = tdl.core.InputArgument.optional(
+        'stages', doc='number of stages.', default=2)
+
+    @tdl.core.SubmodelInit(lazzy=True)
     def layers(self, **kargs):
         tdl.core.assert_initialized(
-            self, 'layers', ['stages', 'units', 'kernel_size', 'leaky_rate',
-                             'pooling', 'dropout', 'batchnorm', 'use_bias',
-                             'equalized'])
+            self, 'layers',
+            ['stages', 'units', 'kernel_size', 'leaky_rate', 'pooling',
+             'dropout', 'batchnorm', 'use_bias', 'equalized'])
         layers = list()
         for idx in range(self.stages):
             layers.append(ResBlockPreAct(
@@ -410,13 +422,14 @@ class ResStages101(ResStages):
                         'filters': [self.units//4, self.units//4, self.units],
                         'kernels': [1, self.kernel_size, 1]},
                     'leaky_rate': self.leaky_rate,
-                    'pooling': {'size': (self.pooling_size if idx == 0 else None)},
+                    'pooling': self.pooling[idx],
                     'dropout': {'rate': self.dropout},
                     },
                 batchnorm={'method': self.batchnorm},
                 use_bias=self.use_bias,
                 equalized=self.equalized,
                 **kargs))
+        return layers
 
 
 class ResNet(tdl.core.Layer):
@@ -432,7 +445,7 @@ class ResNet(tdl.core.Layer):
 
     @tdl.core.SubmodelInit(lazzy=True)
     def hidden(self, units, pooling=None, kernels=3,
-               dropout=None, batchnorm=None):
+               dropout=None, batchnorm=None, stages=3):
         """hidden layers
         Args:
             units: list(int) with n_layers elements.
@@ -457,8 +470,8 @@ class ResNet(tdl.core.Layer):
 
         model = tdl.stacked.StackedLayers()
         for i in range(len(units)):
-            model.add(ResStages(
-                stages=1,
+            model.add(ResStages101(
+                stages=stages,
                 units=units[i],
                 kernel_size=kernels[i],
                 batchnorm=batchnorm,
