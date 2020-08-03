@@ -287,7 +287,7 @@ def load_cifar10(
         if crop_method == 'resize':
             return augment.random_resize_crop(image, **crop_kargs)
         elif crop_method == 'pad':
-            return augment.random_resize_pad(image, **crop_kargs)
+            return augment.random_pad_crop(image, **crop_kargs)
         else:
             raise ValueError(f'crop method {crop_method} not recognized')
 
