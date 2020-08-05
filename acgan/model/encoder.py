@@ -171,11 +171,32 @@ class Estimator(tdl.core.TdlModel):
                 if isinstance(value, str) else value
                 for name, value in metrics.items()}
 
+    @tdl.core.SubmodelInit
+    def regularizer(self, scale=None, method=tf.nn.l2_loss, layer_types=None):
+        """  """
+        if scale is None:
+            return None
+        if layer_types is None:
+            layer_types = (
+                tf.keras.layers.Conv2D, tf.keras.layers.Conv2DTranspose,
+                tf.keras.layers.Dense,
+                tdl.convnet.Conv2DLayer, tdl.convnet.Conv1x1Proj,
+                tdl.convnet.Conv2DTranspose, tdl.dense.AffineLayer)
+
+        def compute_reg():
+            layers = tdl.core.find_instances(self.model, layer_types)
+            return scale*tf.add_n([method(layer.kernel) for layer in layers])
+
+        return compute_reg
+
     def _evaluate_graph(self, train_x, train_y, valid_x=None, valid_y=None):
         tdl.core.assert_initialized(
-            self, '_evaluate_graph', ['model', 'loss', 'metrics'])
+            self, '_evaluate_graph',
+            ['model', 'loss', 'metrics', 'regularizer'])
         train_pred = self.model(train_x)
         train_loss = self.loss(train_y, train_pred)
+        if self.regularizer is not None:
+            train_loss = train_loss + self.regularizer()
         train_metrics = {name: mi(train_y, train_pred)
                          for name, mi in self.metrics.items()}
         train = {'loss': train_loss, 'pred': train_pred,
