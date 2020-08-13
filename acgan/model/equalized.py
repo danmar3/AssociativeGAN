@@ -97,11 +97,13 @@ def get_layer_lib(lib_name='keras'):
         return SimpleNamespace(
             Conv1x1Proj=tdl.convnet.Conv1x1Proj,
             Conv2D=tf_layers.Conv2D,
+            Conv2DTranspose=tdl.convnet.Conv2DTranspose,
             Dense=tf_layers.Dense)
     elif lib_name == 'equalized':
         return SimpleNamespace(
             Conv1x1Proj=Conv1x1Proj,
             Conv2D=Conv2DLayer,
+            Conv2DTranspose=Conv2DTranspose,
             Dense=AffineLayer)
     else:
         raise ValueError(f'unrecognized lib_name {lib_name}')

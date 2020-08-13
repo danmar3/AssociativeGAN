@@ -1,3 +1,4 @@
+import typing
 from types import SimpleNamespace
 
 import twodlearn as tdl
@@ -6,6 +7,13 @@ import tensorflow.keras.layers as tf_layers
 from twodlearn.resnet import convnet as tdl_convnet
 
 from . import equalized
+from . import res_conv2d
+from .base import VectorNormalizer, MinibatchStddev
+
+BATCHNORM_TYPES = {
+    'batchnorm': tf_layers.BatchNormalization,
+    'pixelwise': VectorNormalizer
+}
 
 
 class Discriminator(tdl.core.Layer):
@@ -29,35 +37,34 @@ class Discriminator(tdl.core.Layer):
         else:
             return equalized.get_layer_lib('keras')
 
-    @tdl.core.LazzyProperty
     def hidden_shapes(self):
         tdl.core.assert_initialized(
-            self, 'hidden_shapes', ['input_shape', 'projections'])
+            self, 'hidden_shapes', ['input_shape', 'projections', 'hidden'])
         pyramid_shape = self.input_shape
         input_shapes = pyramid_shape[::-1]
         output_list = list()
-        proj_shape = self.projections[0].compute_output_shape(input_shapes[0])
-        output_shape = self.hidden[0].compute_output_shape(proj_shape)
+        output_shape = self.input_layer.compute_output_shape(input_shapes[0])
+
         output_list.append(output_shape)
         for x_shape, projection, layer in\
-                zip(input_shapes[1:], self.projections[1:], self.hidden[1:]):
+                zip(input_shapes, self.projections, self.hidden[:len(self.units)]):
             proj_shape = projection.compute_output_shape(x_shape)
             extended = proj_shape[:-1].concatenate(
-                proj_shape[-1].value + output_shape[-1].value)
+                proj_shape.as_list()[-1] + output_shape.as_list()[-1])
             output_shape = layer.compute_output_shape(extended)
+            output_list.append(output_shape)
+        for layer in self.hidden[len(self.units):]:
+            output_shape = layer.compute_output_shape(output_shape)
             output_list.append(output_shape)
         return output_list
 
     @tdl.core.SubmodelInit(lazzy=True)
-    def projections(self, init_units=None, activation=None):
+    def projections(self, activation=None):
         tdl.core.assert_initialized(
             self, 'projections',
             ['units', 'hidden', 'input_shape', 'use_bias', 'layer_lib'])
         projections = list()
-        if init_units is None:
-            init_units = self.units[0]//2
-        units_list = [init_units] + [ui for ui in self.units]
-        for units in units_list:
+        for units in self.units:
             projections.append(
                 self.layer_lib.Conv1x1Proj(
                     units=units,
@@ -65,6 +72,19 @@ class Discriminator(tdl.core.Layer):
                     use_bias=self.use_bias
                 ))
         return projections
+
+    @tdl.core.SubmodelInit(lazzy=True)
+    def input_layer(self, units=None, kernel_size=3):
+        tdl.core.assert_initialized(
+            self, 'input_layer',
+            ['layer_lib', 'units', 'use_bias'])
+        if units is None:
+            units = self.units[0]
+        return self.layer_lib.Conv2D(
+            filters=units,
+            kernel_size=[kernel_size, kernel_size],
+            padding='same',
+            use_bias=self.use_bias)
 
     @tdl.core.SubmodelInit(lazzy=True)
     def hidden(self, stages=3, batchnorm=None, dropout=None,
@@ -87,7 +107,7 @@ class Discriminator(tdl.core.Layer):
 
         layers = list()
         for i in range(len(self.units)):
-            layers.append(ResBottleneck(
+            layers.append(res_conv2d.ResBottleneck(
                 stages=stages,
                 units=self.units[i],
                 kernel_size=kernels[i],
@@ -99,7 +119,7 @@ class Discriminator(tdl.core.Layer):
                 equalized=self.equalized
                 ))
         layers.append(MinibatchStddev())
-        layers.append(ResBottleneck(
+        layers.append(res_conv2d.ResBottleneck(
             stages=stages,
             units=self.units[-1],
             kernel_size=3,
@@ -138,15 +158,22 @@ class Discriminator(tdl.core.Layer):
         inputs = inputs[::-1]
         assert depth == len(self.projections),\
             'pyramid size does not match the number of projections'
-        proj = self.projections[0](inputs[0])
-        out = self.hidden[0](proj)
+        out = self.input_layer(inputs[0])
+        # hidden
+        hidden_h = [out]
         for x_i, projection, layer in\
-                zip(inputs[1:], self.projections[1:], self.hidden[1:]):
+                zip(inputs, self.projections, self.hidden[:len(self.units)]):
             proj = projection(x_i)
             extended = tf.concat([proj, out], axis=-1)
             out = layer(extended)
+            hidden_h.append(out)
+        # finalize
+        for layer in self.hidden[len(self.units):]:
+            out = layer(out)
+            hidden_h.append(out)
+        # flatten
         if output == 'hidden':
-            return out
+            return hidden_h
         if self.flatten:
             out = self.flatten(out)
         if output == 'flatten':
@@ -172,7 +199,7 @@ class NewAxis(tdl.core.Layer):
         tdl.core.assert_initialized(self, 'compute_output_shape', ['axis'])
         output_shape = list()
         for ai in self.axis:
-            if ai is tf.newshape:
+            if ai is tf.newaxis:
                 output_shape.append(1)
             elif ai is ...:
                 output_shape = output_shape + input_shape.as_list()
@@ -217,8 +244,8 @@ class Generator(tdl.core.Layer):
         'output_activation', doc="activation function at the output.",
         default=None)
     output_channels = tdl.core.InputArgument.optional(
-        'output_channels', doc="number of output channels"
-    )
+        'output_channels', doc="number of output channels",
+        default=3)
 
     @tdl.core.SimpleParameter
     def layer_lib(self, _):
@@ -238,10 +265,10 @@ class Generator(tdl.core.Layer):
 
     def hidden_shapes(self):
         tdl.core.assert_initialized(
-            self, 'hidden_shapes', ['embedding_size', 'layers'])
+            self, 'hidden_shapes', ['embedding_size', 'input_layer', 'hidden'])
         _input_shape = tf.TensorShape([None, self.embedding_size])
         hidden_shapes = list()
-        for layer in self.layers[:-1]:
+        for layer in [self.input_layer] + self.hidden.layers:
             _input_shape = layer.compute_output_shape(_input_shape)
             hidden_shapes.append(_input_shape)
         return hidden_shapes
@@ -254,7 +281,8 @@ class Generator(tdl.core.Layer):
         tdl.core.assert_initialized(
             self, 'pyramid_shapes', ['projections'])
         shapes = list()
-        for proj, hidden_shape in zip(self.projections, self.hidden_shapes()):
+        for proj, hidden_shape in zip(
+                self.projections, self.hidden_shapes()[1:]):
             shapes.append(proj.compute_output_shape(hidden_shape))
         return shapes
 
@@ -272,22 +300,24 @@ class Generator(tdl.core.Layer):
                 activation=(self.output_activation() if self.output_activation
                             else None),
                 use_bias=self.use_bias)
-            for i in range(len(self.hidden))]
+            for i in range(len(self.hidden.layers))]
         return projections
 
     @tdl.core.SubmodelInit(lazzy=True)
     def input_layer(self, target_shape, batchnorm=None, kernel_size=3):
         tdl.core.assert_initialized(
-            self, 'input_layer', ['layer_lib', 'use_bias'])
+            self, 'input_layer', ['layer_lib', 'use_bias', 'batchnorm'])
         # batchnorm
         if self.batchnorm is not None:
             batchnorm = self.batchnorm
+        if isinstance(batchnorm, str):
+            batchnorm = BATCHNORM_TYPES[batchnorm]
         # project
         layers = tdl.stacked.StackedLayers()
         layers.add(NewAxis(axis=[..., tf.newaxis, tf.newaxis]))
         layers.add(TransposeLayer(axis=[0, 3, 2, 1]))
 
-        target_shape = target_shape.as_list()
+        target_shape = tf.TensorShape(target_shape).as_list()
         layers.add(self.layer_lib.Conv2DTranspose(
             filters=target_shape[-1],
             kernel_size=[target_shape[0], target_shape[1]]
@@ -317,7 +347,7 @@ class Generator(tdl.core.Layer):
             kernels = [kernel_size for _ in range(n_layers)]
         assert all(isinstance(ki, int) for ki in kernels)
         # upsample arg
-        assert (isinstance(upsample, (int, list, tuple)) or (upsample is None))
+        assert (isinstance(upsample, (int, dict, list, tuple)) or (upsample is None))
         if isinstance(upsample, (int, dict)):
             upsample = [upsample for _ in range(n_layers)]
         assert all(isinstance(pi, (int, dict)) or (pi is None)
@@ -328,13 +358,14 @@ class Generator(tdl.core.Layer):
 
         layers = tdl.stacked.StackedLayers()
         for i in range(len(self.units)):
-            layers.add(ResBottleneck(
+            layers.add(res_conv2d.ResBottleneck(
                 stages=stages,
                 units=self.units[i],
                 kernel_size=kernels[i],
                 batchnorm=batchnorm,
                 leaky_rate=leaky_rate,
-                upsample=upsample[i],
+                upsample=(upsample[i] if isinstance(upsample[i], dict) else
+                          {'size': upsample[i]}),
                 dropout=dropout,
                 use_bias=self.use_bias,
                 equalized=self.equalized

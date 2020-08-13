@@ -54,16 +54,18 @@ class Conv2DBlock(tdl.core.Layer):
                 size=size, data_format=data_format, interpolation=method)
 
         if (layers is None) or (size is None):
-            method = None
+            method_fn = None
         elif method in ('nearest, bilinear'):
-            method = upsampling
+            method_fn = upsampling
+        else:
+            method_fn = method
         if isinstance(layers, int):
             layers = [layers]
-        return SimpleNamespace(method=method, layers=layers)
+        return SimpleNamespace(method=method_fn, layers=layers)
 
     @tdl.core.SubmodelInit(lazzy=True)
     def conv(self, filters=None, kernels=3, padding='same',
-             batchnorm=True, activation=True):
+             batchnorm=True, activation=True, strides=None):
         tdl.core.assert_initialized(
             self, 'conv', ['use_bias', 'leaky_rate',
                            'Conv2DClass', 'batchnorm', 'upsample'])
@@ -77,6 +79,9 @@ class Conv2DBlock(tdl.core.Layer):
         # activation
         if activation in (True, False):
             activation = [activation for _ in range(len(filters))]
+        # strides
+        if strides is None:
+            strides = [1, 1]
         # layers
         layers = tdl.stacked.StackedLayers()
         for idx in range(len(filters)):
@@ -92,7 +97,8 @@ class Conv2DBlock(tdl.core.Layer):
             kargs = {'filters': filters[idx]} if filters[idx] else {}
             layers.add(
                 self.Conv2DClass(
-                    kernel_size=kernels[idx], strides=[1, 1],
+                    kernel_size=kernels[idx],
+                    strides=(strides if idx == 0 else [1, 1]),
                     padding=padding,
                     use_bias=self.use_bias,
                     **kargs))
@@ -209,7 +215,7 @@ class ResBlock(ResConv2D):
         return value
 
     DEFAULT_RESIZE = {'upsample': 'bilinear',
-                      'downsample': 'avg_pool',
+                      'downsample': 'nearest',
                       'resize': 'bilinear'}
 
     @tdl.core.SubmodelInit(lazzy=True)
@@ -253,6 +259,14 @@ class ResBlock(ResConv2D):
     @tdl.core.SubmodelInit(lazzy=True)
     def residual(self, conv=None, pooling=None, upsample=None,
                  batchnorm='batchnorm', **kargs):
+        """Residual model
+        Args:
+            conv: {filters: list(int), kernels: int | list(int),
+                   strides: list(int)},
+            pooling: dict{size: int, method: str}
+            upsample: dict{method: str, layers: list(int)}
+            batchnorm: str | dict{method: str}
+            """
         tdl.core.assert_initialized(
             self, 'residual', ['use_bias', 'equalized'])
         # conv arg
@@ -276,32 +290,28 @@ class ResBlock(ResConv2D):
                 input_shape=self.input_shape)
         input_size = self.input_shape[1:-1].as_list()
         output_size = output_shape[1:-1].as_list()
-        if all(oi >= ii for ii, oi in zip(input_size, output_size)):
+        if all(oi == ii for ii, oi in zip(input_size, output_size)):
+            return None
+        elif all(oi >= ii for ii, oi in zip(input_size, output_size)):
             return 'upsample'
-        elif all(ii >= oi == 0 for ii, oi in zip(input_size, output_size)):
+        elif all(oi <= ii for ii, oi in zip(input_size, output_size)):
             return 'downsample'
         else:
-            return None
+            return 'resize'
 
     def call(self, inputs):
         residual = self.residual(inputs)
+        resize_type = self._resize_operation()
+        assert resize_type in (None, 'upsample', 'downsample')
 
-        if self.upsample is not None:
-            resized = self.upsample(inputs)
-            shortcut = self.projection(resized)
-        elif self.downsample is not None:
-            projection = self.projection(inputs)
-            shortcut = self.downsample(projection)
-        elif self.resize is not None:
-            if self._resize_operation() == 'upsample':
-                resized = self.resize(inputs)
+        if resize_type:
+            resize_operation = self._get_resize_operation()
+            if resize_type == 'upsample':
+                resized = resize_operation(inputs)
                 shortcut = self.projection(resized)
-            elif self._resize_operation() == 'downsample':
+            elif resize_type == 'downsample':
                 projection = self.projection(inputs)
-                shortcut = self.resize(projection)
-            else:
-                raise ValueError('resize operation is a mix of upsampling and '
-                                 'downsampling.')
+                resized = resize_operation(projection)
         else:
             shortcut = self.projection(inputs)
 
@@ -429,9 +439,19 @@ class ResStages(tdl.stacked.StackedLayers):
                     for idx in range(len(self.units))]
         raise ValueError('pooling should be either an int or a dict.')
 
+    @tdl.core.InputArgument
+    def strides(self, value):
+        tdl.core.assert_initialized(self, 'pooling', ['stages'])
+        if value is None:
+            value = None
+        if value is None or isinstance(value, int):
+            value = [value if idx == 0 else None
+                     for idx in range(self.stages)]
+        return value
+
     @tdl.core.SubmodelInit
-    def upsample(self, size=None, method='bilinear'):
-        return {'size': size, 'method': method}
+    def upsample(self, size=None, method='nearest', **kargs):
+        return {'size': size, 'method': method, **kargs}
 
     @tdl.core.SubmodelInit(lazzy=True)
     def layers(self, **kargs):
@@ -439,7 +459,7 @@ class ResStages(tdl.stacked.StackedLayers):
             self, 'layers',
             ['stages', 'units', 'kernel_size', 'leaky_rate', 'pooling',
              'upsample', 'dropout', 'batchnorm', 'use_bias', 'equalized',
-             'pre_activation'])
+             'pre_activation', 'strides'])
         layers = list()
         for idx in range(self.stages):
             layers.append(ResBlockPreAct(
@@ -448,7 +468,8 @@ class ResStages(tdl.stacked.StackedLayers):
                 residual={
                     'conv': {
                         'filters': [self.units, self.units],
-                        'kernels': self.kernel_size},
+                        'kernels': self.kernel_size,
+                        'strides': self.strides[idx]},
                     'leaky_rate': self.leaky_rate,
                     'pooling': self.pooling[idx],
                     'upsample': (self.upsample if idx == 0 else dict()),
@@ -474,8 +495,8 @@ class ResBottleneck(ResStages):
         tdl.core.assert_initialized(
             self, 'layers',
             ['stages', 'units', 'kernel_size', 'leaky_rate', 'pooling',
-             'dropout', 'batchnorm', 'use_bias', 'equalized',
-             'pre_activation'])
+             'upsample', 'dropout', 'batchnorm', 'use_bias', 'equalized',
+             'pre_activation', 'strides'])
         layers = list()
         for idx in range(self.stages):
             layers.append(ResBlockPreAct(
@@ -484,9 +505,12 @@ class ResBottleneck(ResStages):
                 residual={
                     'conv': {
                         'filters': [self.units//4, self.units//4, self.units],
-                        'kernels': [1, self.kernel_size, 1]},
+                        'kernels': [1, self.kernel_size, 1],
+                        'strides': self.strides[idx]
+                        },
                     'leaky_rate': self.leaky_rate,
                     'pooling': self.pooling[idx],
+                    'upsample': (self.upsample if idx == 0 else dict()),
                     'dropout': {'rate': self.dropout},
                     },
                 batchnorm={'method': self.batchnorm},
@@ -533,7 +557,7 @@ class ResNet(tdl.core.Layer):
 
     @tdl.core.SubmodelInit(lazzy=True)
     def hidden(self, units, pooling=None, kernels=3,
-               dropout=None, batchnorm=None, stages=3,
+               dropout=None, batchnorm=None, stages=3, strides=None,
                layer_type="bottleneck", pre_activation=True,
                **kargs):
         """hidden layers
@@ -557,7 +581,7 @@ class ResNet(tdl.core.Layer):
         assert all(isinstance(ki, int) for ki in kernels)
         # pooling arg
         assert (isinstance(pooling, (int, list, tuple)) or (pooling is None))
-        if isinstance(pooling, (int, dict)):
+        if isinstance(pooling, (int, dict)) or pooling is None:
             pooling = [pooling for _ in range(n_layers)]
         assert all(isinstance(pi, (int, dict)) or (pi is None)
                    for pi in pooling)
@@ -566,6 +590,10 @@ class ResNet(tdl.core.Layer):
         if isinstance(stages, int):
             stages = [stages for _ in range(n_layers)]
         assert all(isinstance(si, int) for si in stages)
+        # strides arg
+        assert (isinstance(strides, (int, list, tuple)) or (strides is None))
+        if isinstance(strides, (int, dict)) or strides is None:
+            strides = [strides for _ in range(n_layers)]
 
         model = tdl.stacked.StackedLayers()
         for i in range(len(units)):
@@ -575,6 +603,7 @@ class ResNet(tdl.core.Layer):
                 kernel_size=kernels[i],
                 batchnorm=batchnorm,
                 leaky_rate=self.leaky_rate,
+                strides=strides[i],
                 pooling=pooling[i],
                 dropout=dropout,
                 use_bias=self.use_bias,
