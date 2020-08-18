@@ -523,11 +523,12 @@ class ResBottleneck(ResStages):
 class ResNet(tdl.core.Layer):
     use_bias = tdl.core.InputArgument.optional(
         'use_bias', doc='use bias', default=True)
-
     equalized = tdl.core.InputArgument.optional(
         'equalized', doc="use equalized version of conv layers",
         default=False)
-
+    batchnorm = tdl.core.InputArgument.optional(
+        'batchnorm', doc='batch normalization to use.',
+        default=None)
     leaky_rate = tdl.core.InputArgument.optional(
         'leaky_rate', doc='leaky rate', default=0.2)
 
@@ -572,7 +573,7 @@ class ResNet(tdl.core.Layer):
         """
         tdl.core.assert_initialized(
             self, 'hidden',
-            ['equalized', 'use_bias', 'leaky_rate', 'layer_lib'])
+            ['equalized', 'use_bias', 'leaky_rate', 'layer_lib', 'batchnorm'])
         n_layers = len(units)
         # kernels arg
         assert isinstance(kernels, (int, list, tuple))
@@ -594,7 +595,10 @@ class ResNet(tdl.core.Layer):
         assert (isinstance(strides, (int, list, tuple)) or (strides is None))
         if isinstance(strides, (int, dict)) or strides is None:
             strides = [strides for _ in range(n_layers)]
-
+        # batchnorm
+        if (self.batchnorm is not None) and (batchnorm is None):
+            batchnorm = self.batchnorm
+        # build
         model = tdl.stacked.StackedLayers()
         for i in range(len(units)):
             model.add(self.LAYER_TYPE[layer_type](
@@ -616,10 +620,14 @@ class ResNet(tdl.core.Layer):
     @tdl.core.SubmodelInit(lazzy=True)
     def flatten(self, method='global_maxpool', batchnorm=None, activation=True):
         layers = tdl.stacked.StackedLayers()
+        # batchnorm
+        if (self.batchnorm is not None) and (batchnorm is None):
+            batchnorm = self.batchnorm
         if batchnorm:
             if isinstance(batchnorm, str):
                 batchnorm = BATCHNORM_TYPES[batchnorm]
             layers.add(batchnorm())
+        # flatten
         if activation:
             layers.add(tf_layers.LeakyReLU(self.leaky_rate))
         if method == 'flatten':
@@ -634,40 +642,62 @@ class ResNet(tdl.core.Layer):
 
     @tdl.core.SubmodelInit(lazzy=True)
     def dense(self, units, batchnorm=None):
-        tdl.core.assert_initialized(self, 'dense', ['equalized', 'leaky_rate'])
+        tdl.core.assert_initialized(
+            self, 'dense', ['equalized', 'leaky_rate', 'layer_lib'])
+        # units arg
         if not units:
             return None
         if isinstance(units, int):
             units = [units]
+        # batchnorm arg
         if isinstance(batchnorm, str):
             batchnorm = BATCHNORM_TYPES[batchnorm]
-        dense_layer = (equalized.AffineLayer if self.equalized
-                       else tf_layers.Dense)
-
+        # build
         layers = tdl.stacked.StackedLayers()
         for ui in units[:-1]:
             if batchnorm is not None:
                 layers.add(batchnorm())
             layers.add(tf_layers.LeakyReLU(self.leaky_rate))
-            layers.add(dense_layer(units=ui))
+            layers.add(self.layer_lib.Dense(units=ui))
         if batchnorm is not None:
             layers.add(batchnorm())
-        layers.add(dense_layer(units=units[-1]))
+        layers.add(self.layer_lib.Dense(units=units[-1]))
         return layers
 
-    def compute_output_shape(self, input_shape):
+    def internal_shapes(self, input_shape=None):
         tdl.core.assert_initialized(
-            self, 'compute_output_shape',
-            ['input_layer', 'hidden', 'flatten', 'dense'])
+            self, 'hidden_shapes',
+            ['input_shape', 'input_layer', 'hidden', 'flatten', 'dense'])
+        if input_shape is None:
+            input_shape = self.input_shape
+
         output_shape = input_shape
+        output = list()
         if self.input_layer:
             output_shape = self.input_layer.compute_output_shape(output_shape)
+            output.append(output_shape)
         output_shape = self.hidden.compute_output_shape(output_shape)
+        output.append(output_shape)
         if self.flatten:
             output_shape = self.flatten.compute_output_shape(output_shape)
+            output.append(output_shape)
         if self.dense:
             output_shape = self.dense.compute_output_shape(output_shape)
-        return output_shape
+            output.append(output_shape)
+        return output
+
+    def compute_output_shape(self, input_shape):
+        return self.internal_shapes(input_shape)[-1]
+
+    def hidden_shapes(self):
+        output_shape = self.input_shape
+        if self.input_layer:
+            output_shape = self.input_layer.compute_output_shape(output_shape)
+        output = list()
+        for layer in self.hidden.layers:
+            output_shape = layer.compute_output_shape(output_shape)
+            output.append(output_shape)
+        return output
 
     def call(self, inputs, output='dense'):
         out = inputs

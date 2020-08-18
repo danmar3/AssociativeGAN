@@ -1,9 +1,10 @@
 import twodlearn as tdl
 import tensorflow as tf
+import tensorflow_probability as tfp
 from twodlearn.core import nest
 
 
-class LogisticSimpleGP(tdl.core.Layer):
+class DLogisticSimpleGP(tdl.core.Layer):
     """ Simplified gradient penalty
 
     Presented in https://arxiv.org/pdf/1801.04406.pdf
@@ -60,7 +61,7 @@ class LogisticSimpleGP(tdl.core.Layer):
         return loss
 
 
-class Logistic():
+class DLogistic():
     discriminator = tdl.core.Submodel.required(
         'discriminator', doc='discriminator model')
 
@@ -72,4 +73,52 @@ class Logistic():
         loss_sim = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
                 tf.zeros_like(pred_sim), pred_sim)
         loss = (loss_real + loss_sim)/2.0
+        return loss
+
+
+class NegLogProb(tdl.core.Layer):
+    def call(self, labels, predicted):
+        return tf.reduce_mean(
+            tdl.core.array.reduce_sum_rightmost(
+                -predicted.log_prob(labels)))
+
+
+def scale_loss(comp, ref):
+    loss_tr = ref.scale.solve(comp.scale.to_dense())
+    # frobenius
+    loss_tr = 0.5*tf.reduce_sum(tf.square(loss_tr), axis=[-2, -1])
+    loss_det = (ref.scale.log_abs_determinant()
+                - comp.scale.log_abs_determinant())
+    return loss_tr + loss_det
+
+
+class EmbeddingLoss(tdl.core.Layer):
+    model = tdl.core.Submodel.required('model', doc='model.')
+    reg_scale = tdl.core.InputArgument.required(
+        'reg_scale', doc='scale regularization loss.')
+
+    def call(self, zsim, zreal):
+        z_sample = tf.concat(
+                [tf.stop_gradient(zsim.sample()),
+                 tf.stop_gradient(zreal.sample())],
+                axis=0)
+        loss = -self.model.log_prob(z_sample)
+
+        if self.reg_scale is not None:
+            cat = self.model.dist.cat
+            n_comp = self.model.n_components
+            cat_ref = tfp.distributions.Categorical(logits=n_comp*[1.0])
+            cat_loss = tfp.distributions.kl_divergence(cat, cat_ref)
+            loss = tf.reduce_mean(loss) + self.reg_scale*cat_loss
+
+            # gaussian scale
+            ref_scale = tfp.distributions.MultivariateNormalDiag(
+                loc=tf.zeros([self.model.n_dims]),
+                scale_diag=tf.constant(
+                    value=self.model.get_max_scale(),
+                    shape=[self.model.n_dims],
+                    dtype=tf.float32))
+            comp_loss = [scale_loss(comp, ref_scale)
+                         for comp in self.model.dist.components]
+            loss = loss + self.reg_scale * tf.add_n(comp_loss)
         return loss

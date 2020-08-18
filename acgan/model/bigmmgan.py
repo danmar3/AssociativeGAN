@@ -9,11 +9,40 @@ from twodlearn.resnet import convnet as tdl_convnet
 from . import equalized
 from . import res_conv2d
 from .base import VectorNormalizer, MinibatchStddev
+from .losses import DLogistic, DLogisticSimpleGP, NegLogProb, EmbeddingLoss
+from .encoder import Estimator, CallWrapper
+from .gmm import GMM
 
 BATCHNORM_TYPES = {
     'batchnorm': tf_layers.BatchNormalization,
     'pixelwise': VectorNormalizer
 }
+
+
+class NoiseLayer(tdl.core.Layer):
+    def compute_output_shape(self, input_shape):
+        return tf.TensorShape(input_shape)
+
+    @tdl.core.ParameterInit(lazzy=True)
+    def kernel(self, initializer=None, trainable=True, **kargs):
+        tdl.core.assert_initialized(self, 'kernel', ['input_shape'])
+        if initializer is None:
+            initializer = tf.keras.initializers.zeros()
+        return self.add_weight(
+            name='kernel',
+            initializer=initializer,
+            shape=[self.input_shape[-1].value],
+            trainable=trainable,
+            **kargs)
+
+    def call(self, inputs):
+        assert len(inputs.shape) == 4  # NHWC
+        inputs = tf.convert_to_tensor(inputs)
+        noise = tf.random_normal(
+            [tf.shape(inputs)[0], inputs.shape[1], inputs.shape[2], 1],
+            dtype=inputs.dtype)
+        return inputs + noise * tf.reshape(tf.cast(self.kernel, inputs.dtype),
+                                           [1, 1, 1, -1])
 
 
 class Discriminator(tdl.core.Layer):
@@ -337,7 +366,7 @@ class Generator(tdl.core.Layer):
     @tdl.core.SubmodelInit(lazzy=True)
     def hidden(self, stages=3, batchnorm=None, dropout=None,
                kernel_size=3, upsample=2,
-               leaky_rate=0.2):
+               leaky_rate=0.2, add_noise=True):
         tdl.core.assert_initialized(
             self, 'hidden', ['units', 'use_bias', 'equalized'])
         n_layers = len(self.units)
@@ -358,7 +387,10 @@ class Generator(tdl.core.Layer):
 
         layers = tdl.stacked.StackedLayers()
         for i in range(len(self.units)):
-            layers.add(res_conv2d.ResBottleneck(
+            stage = tdl.stacked.StackedLayers()
+            if add_noise:
+                stage.add(NoiseLayer())
+            stage.add(res_conv2d.ResBottleneck(
                 stages=stages,
                 units=self.units[i],
                 kernel_size=kernels[i],
@@ -370,9 +402,10 @@ class Generator(tdl.core.Layer):
                 use_bias=self.use_bias,
                 equalized=self.equalized
                 ))
+            layers.add(stage)
         return layers
 
-    def call(self, inputs, output='image'):
+    def call(self, inputs, output='pyramid'):
         '''the call expects a full pyramid.'''
         out = inputs
         if self.input_layer:
@@ -391,3 +424,228 @@ class Generator(tdl.core.Layer):
 
     def pyramid(self, inputs):
         return self(inputs, output='pyramid')
+
+
+class NormalResNet(res_conv2d.ResNet):
+    @tdl.core.Submodel
+    def normal(self, _):
+        tdl.core.assert_initialized(self, 'normal', ['dense'])
+        return tdl.bayesnet.NormalModel(
+            loc=lambda x: x,
+            batch_shape=self.dense.layers[-1].units)
+
+    def call(self, inputs, output='normal'):
+        if output == 'normal':
+            out = super(NormalResNet, self).call(inputs, output='dense')
+            if self.normal:
+                out = self.normal(out)
+        else:
+            out = super(NormalResNet, self).call(inputs, output=output)
+        return out
+
+
+@tdl.core.create_init_docstring
+class BiGmmGan(tdl.core.TdlModel):
+    batchnorm = tdl.core.InputArgument.optional(
+        'batchnorm', doc='batch normalization to use.',
+        default='pixelwise')
+    use_bias = tdl.core.InputArgument.optional(
+        'use_bias', doc='use bias', default=True)
+    equalized = tdl.core.InputArgument.optional(
+        'equalized', doc="use equalized version of conv layers",
+        default=True)
+
+    embedding_size = tdl.core.InputArgument.required(
+        'embedding_size', doc='dimension of embedding space.')
+
+    @tdl.core.InputArgument
+    def discriminator_loss(self, value, **kargs):
+        tdl.core.assert_initialized(
+            self, 'discriminator_loss', ['discriminator'])
+        if value is None:
+            value = 'simplegp'
+        if isinstance(value, str):
+            losses = {'logistic': DLogistic, 'simplegp': DLogisticSimpleGP}
+            value = losses[value](discriminator=self.discriminator, **kargs)
+        return value
+
+    @tdl.core.SubmodelInit
+    def generator(self, init_shape, units, output_channels=3,
+                  output_activation=None,
+                  add_noise=False, **kargs):
+        tdl.core.assert_initialized(
+            self, 'generator',
+            ['batchnorm', 'use_bias', 'equalized', 'embedding_size'])
+
+        hidden = {'upsample': {'size': 2, 'method': 'nearest', 'layers': 1}}
+        if 'hidden' in kargs:
+            hidden = {**hidden, **kargs['hidden']}
+        kargs['hidden'] = hidden
+        return Generator(
+            input_layer={'target_shape': init_shape},
+            units=units,
+            output_activation=output_activation,
+            output_channels=output_channels,
+            embedding_size=self.embedding_size,
+            batchnorm=self.batchnorm,
+            equalized=self.equalized,
+            use_bias=self.use_bias,
+            **kargs)
+
+    @tdl.core.SubmodelInit
+    def discriminator(self, units, **kargs):
+        tdl.core.assert_initialized(
+            self, 'generator',
+            ['batchnorm', 'use_bias', 'equalized', 'embedding_size'])
+        return Discriminator(
+            units=units,
+            batchnorm=self.batchnorm,
+            equalized=self.equalized,
+            use_bias=self.use_bias,
+            **kargs)
+
+    @tdl.core.SubmodelInit
+    def embedding(self, n_components, init_loc=1e-5, init_scale=1.0,
+                  min_scale_p=None, constrained_loc=False):
+        '''Embedding model P(z)
+
+        Args:
+            n_components: number of clusters.
+            init_loc: init mean.
+            init_scale: init scale.
+            min_scale_p: minimum scale (in percentage of maximum).
+        '''
+        tdl.core.assert_initialized(self, 'embedding', ['embedding_size'])
+        model = GMM(
+            n_dims=self.embedding_size,
+            n_components=n_components,
+            components={'init_loc': init_loc,
+                        'init_scale': init_scale,
+                        'constrained_loc': constrained_loc})
+        return model
+
+    @tdl.core.SubmodelInit
+    def encoder(self, units, kernels=3, strides=None, pooling=2, stages=3,
+                layer_type='plain'):
+        tdl.core.assert_initialized(
+            self, 'generator',
+            ['batchnorm', 'use_bias', 'equalized', 'embedding_size'])
+        return NormalResNet(
+           input_layer={'units': 16},
+           hidden={
+               'units': units,
+               'kernels': kernels,
+               'strides': strides,
+               'pooling': pooling,
+               'stages': stages,
+               'layer_type': layer_type,
+               'pre_activation': False},
+           flatten={'method': 'global_avgpool',
+                    'batchnorm': 'batchnorm'},
+           dense={'units': self.embedding_size},
+           use_bias=self.use_bias,
+           equalized=self.equalized,
+           batchnorm=self.batchnorm)
+
+    def generator_trainer(self, batch_size, learning_rate, beta1=0.0):
+        train_step = tf.Variable(0, dtype=tf.int32, name='train_step')
+        optimizer = tf.compat.v1.train.AdamOptimizer(
+            learning_rate, beta1=beta1)
+
+        xsim = self.generator(self.embedding(batch_size))
+        logits = self.discriminator(xsim)
+        loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
+            tf.ones_like(logits), logits)
+        with tf.control_dependencies([train_step.assign_add(1)]):
+            opt_step = optimizer.minimize(
+                loss, var_list=tdl.core.get_trainable(self.generator))
+        return SimpleNamespace(
+            xsim=xsim,
+            loss=loss,
+            train_step=train_step,
+            optimizer=optimizer,
+            step=opt_step,
+            variables=(optimizer.variables() + [train_step]
+                       + tdl.core.get_variables(self.generator))
+        )
+
+    def discriminator_trainer(self, xreal, batch_size, learning_rate, beta1=0.0):
+        tdl.core.assert_initialized(
+            self, 'discriminator_trainer',
+            ['embedding', 'generator', 'discriminator', 'discriminator_loss'])
+        train_step = tf.Variable(0, dtype=tf.int32, name='train_step')
+        optimizer = tf.compat.v1.train.AdamOptimizer(
+            learning_rate, beta1=beta1)
+
+        xsim = self.generator(self.embedding(batch_size))
+        loss = self.discriminator_loss(x_real=xreal, x_sim=xsim)
+
+        with tf.control_dependencies([train_step.assign_add(1)]):
+            opt_step = optimizer.minimize(
+                loss, var_list=tdl.core.get_trainable(self.discriminator))
+        return SimpleNamespace(
+            xreal=xreal,
+            xsim=xsim,
+            loss=loss,
+            train_step=train_step,
+            optimizer=optimizer,
+            step=opt_step,
+            variables=(optimizer.variables() + [train_step]
+                       + tdl.core.get_variables(self.discriminator))
+        )
+
+    def encoder_trainer(self, xreal, batch_size, optimizer=None):
+        tdl.core.assert_initialized(
+            self, 'encoder_trainer',
+            ['generator', 'discriminator', 'embedding', 'encoder'])
+        if optimizer is None:
+            optimizer = dict()
+
+        estimator = Estimator(loss=NegLogProb(), model=self.encoder)
+        z_samp = self.embedding(batch_size)
+        sim_pyramid = self.generator.pyramid(z_samp)
+        x_sim = sim_pyramid[-1]
+
+        optim = estimator.get_optimizer(x_sim, z_samp, **optimizer)
+        return SimpleNamespace(
+            estimator=estimator, optim=optim,
+            variables=tdl.core.get_variables(self.encoder) +
+            optim.optimizer.variables())
+
+    def embedding_trainer(self, batch_size, xreal, optimizer=None, **kwargs):
+        tdl.core.assert_initialized(
+            self, 'embedding_trainer',
+            ['generator', 'discriminator', 'noise_rate', 'pyramid',
+             'embedding', 'encoder', 'linear_disc'])
+
+        if optimizer is None:
+            optimizer = dict()
+
+        z_sim = self.embedding(batch_size)
+        pyramid_sim = self.generator.pyramid(z_sim)
+        xsim = pyramid_sim[-1]
+
+        zp_sim = self.encoder(xsim)
+        zp_real = self.encoder(xreal)
+
+        estimator = Estimator(
+            loss=CallWrapper(
+                model=EmbeddingLoss(
+                    model=self.embedding,
+                    reg_scale=kwargs['loss']['embedding_kl'],
+                    linear_disc=self.linear_disc
+                ),
+                call_fn=lambda model, _, x: model(x[0], x[1])),
+            model=CallWrapper(
+                model=self.embedding,
+                call_fn=lambda model, x: x)
+            )
+        optim = estimator.get_optimizer([zp_sim, zp_real], None, **optimizer)
+
+        # return
+        return SimpleNamespace(
+            estimator=estimator, optim=optim,
+            variables=(
+                optim.optimizer.variables() +
+                tdl.core.get_variables(self.embedding))
+            )
