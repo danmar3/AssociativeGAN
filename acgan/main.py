@@ -13,6 +13,7 @@ from .train import run_training
 from .model import msg_gan
 from .model.gmm_gan import GmmGan
 from .model.wacgan import WacGan, WacGanV2, WacGanDev
+from .model.bigmmgan import BiGmmGan
 import functools
 from sklearn.manifold import TSNE
 
@@ -477,3 +478,43 @@ class ExperimentWACGAN_Dev(ExperimentGMM):
                 return False
             self._global_steps = self._global_steps + 1
         return True
+
+
+class ExperimentBiGmmGan(ExperimentWACGAN_Dev):
+    name = 'bigmmgan'
+    Model = BiGmmGan
+
+    def _init_trainer(self, xreal):
+        trainer = tdl.core.SimpleNamespace(
+            gen=self.model.generator_trainer(
+                **self.params['generator_trainer']),
+            dis=self.model.discriminator_trainer(
+                xreal=xreal, **self.params['discriminator_trainer']),
+            encoder=self.model.encoder_trainer(
+                xreal=xreal, **self.params['encoder_trainer']),
+            embedding=self.model.embedding_trainer(
+                xreal=xreal, **self.params['embedding_trainer']))
+        tdl.core.variables_initializer(trainer.gen.variables).run()
+        tdl.core.variables_initializer(trainer.dis.variables).run()
+        tdl.core.variables_initializer(trainer.encoder.variables).run()
+        tdl.core.variables_initializer(trainer.embedding.variables).run()
+        return trainer
+
+    def _train_embedding(self, embedding_steps, reset_embedding):
+        _n_steps = embedding_steps
+        reset = False
+        if reset_embedding is not False:
+            if self._global_steps % reset_embedding == 0:
+                print('--> Resetting embedding.')
+                _n_steps = reset_embedding*_n_steps
+                reset = True
+
+        if reset:
+            self.session.run(self.model.embedding.init_op)
+        self.trainer.embedding.optim.run(n_steps=_n_steps)
+
+    @eager_function
+    def reconstruct(self, x_seed):
+        encoded = self.model.encoder(x_seed)
+        xrecon = self.model.generator(encoded.sample())
+        return xrecon[-1]

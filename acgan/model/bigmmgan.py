@@ -12,6 +12,7 @@ from .base import VectorNormalizer, MinibatchStddev
 from .losses import DLogistic, DLogisticSimpleGP, NegLogProb, EmbeddingLoss
 from .encoder import Estimator, CallWrapper
 from .gmm import GMM
+from .pyramid import ImagePyramid
 
 BATCHNORM_TYPES = {
     'batchnorm': tf_layers.BatchNormalization,
@@ -57,6 +58,9 @@ class Discriminator(tdl.core.Layer):
     equalized = tdl.core.InputArgument.optional(
         'equalized', doc="use equalized version of conv layers",
         default=True)
+
+    LAYER_TYPE = {'plain': res_conv2d.ResStages,
+                  'bottleneck': res_conv2d.ResBottleneck}
 
     @tdl.core.SimpleParameter
     def layer_lib(self, _):
@@ -118,7 +122,8 @@ class Discriminator(tdl.core.Layer):
     @tdl.core.SubmodelInit(lazzy=True)
     def hidden(self, stages=3, batchnorm=None, dropout=None,
                kernel_size=3, pooling=2,
-               leaky_rate=0.2):
+               leaky_rate=0.2,
+               layer_type="bottleneck"):
         tdl.core.assert_initialized(
             self, 'hidden', ['units', 'use_bias', 'equalized'])
         n_layers = len(self.units)
@@ -136,7 +141,7 @@ class Discriminator(tdl.core.Layer):
 
         layers = list()
         for i in range(len(self.units)):
-            layers.append(res_conv2d.ResBottleneck(
+            layers.append(self.LAYER_TYPE[layer_type](
                 stages=stages,
                 units=self.units[i],
                 kernel_size=kernels[i],
@@ -145,10 +150,11 @@ class Discriminator(tdl.core.Layer):
                 pooling=pooling[i],
                 dropout=dropout,
                 use_bias=self.use_bias,
-                equalized=self.equalized
+                equalized=self.equalized,
+                layers={'resize_method': 'avg_pool'}
                 ))
         layers.append(MinibatchStddev())
-        layers.append(res_conv2d.ResBottleneck(
+        layers.append(self.LAYER_TYPE[layer_type](
             stages=stages,
             units=self.units[-1],
             kernel_size=3,
@@ -157,7 +163,8 @@ class Discriminator(tdl.core.Layer):
             pooling=None,
             dropout=dropout,
             use_bias=self.use_bias,
-            equalized=self.equalized
+            equalized=self.equalized,
+            layers={'resize_method': 'avg_pool'}
             ))
         return layers
 
@@ -276,6 +283,9 @@ class Generator(tdl.core.Layer):
         'output_channels', doc="number of output channels",
         default=3)
 
+    LAYER_TYPE = {'plain': res_conv2d.ResStages,
+                  'bottleneck': res_conv2d.ResBottleneck}
+
     @tdl.core.SimpleParameter
     def layer_lib(self, _):
         tdl.core.assert_initialized(self, 'layer_lib', ['equalized'])
@@ -354,6 +364,7 @@ class Generator(tdl.core.Layer):
         if batchnorm:
             layers.add(batchnorm())
         # conv
+        # layers.add(tf_layers.LeakyReLU(self.leaky_rate))
         layers.add(self.layer_lib.Conv2D(
             filters=target_shape[-1],
             kernel_size=kernel_size,
@@ -366,7 +377,8 @@ class Generator(tdl.core.Layer):
     @tdl.core.SubmodelInit(lazzy=True)
     def hidden(self, stages=3, batchnorm=None, dropout=None,
                kernel_size=3, upsample=2,
-               leaky_rate=0.2, add_noise=True):
+               leaky_rate=0.2, add_noise=True,
+               layer_type="bottleneck"):
         tdl.core.assert_initialized(
             self, 'hidden', ['units', 'use_bias', 'equalized'])
         n_layers = len(self.units)
@@ -390,7 +402,7 @@ class Generator(tdl.core.Layer):
             stage = tdl.stacked.StackedLayers()
             if add_noise:
                 stage.add(NoiseLayer())
-            stage.add(res_conv2d.ResBottleneck(
+            stage.add(self.LAYER_TYPE[layer_type](
                 stages=stages,
                 units=self.units[i],
                 kernel_size=kernels[i],
@@ -410,10 +422,8 @@ class Generator(tdl.core.Layer):
         out = inputs
         if self.input_layer:
             out = self.input_layer(out)
-        hidden = list()
-        for layer_i in self.hidden.layers:
-            out = layer_i(out)
-            hidden.append(out)
+        hidden = self.hidden(out, output="hidden")
+        out = hidden[-1]
 
         if output == 'hidden':
             return hidden
@@ -547,12 +557,23 @@ class BiGmmGan(tdl.core.TdlModel):
            equalized=self.equalized,
            batchnorm=self.batchnorm)
 
+    @tdl.core.SubmodelInit
+    def pyramid(self, interpolation='nearest'):
+        tdl.core.assert_initialized(self, 'pyramid', ['generator'])
+        sizes = [si.as_list()[1:3]
+                 for si in self.generator.hidden_shapes()[1:]]
+
+        scales = [(sizes[idx][0]//sizes[idx-1][0],
+                   sizes[idx][1]//sizes[idx-1][1])
+                  for idx in range(1, len(sizes))]
+        return ImagePyramid(scales=scales, interpolation=interpolation)
+
     def generator_trainer(self, batch_size, learning_rate, beta1=0.0):
         train_step = tf.Variable(0, dtype=tf.int32, name='train_step')
         optimizer = tf.compat.v1.train.AdamOptimizer(
             learning_rate, beta1=beta1)
 
-        xsim = self.generator(self.embedding(batch_size))
+        xsim = self.generator(self.embedding(batch_size), output="pyramid")
         logits = self.discriminator(xsim)
         loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
             tf.ones_like(logits), logits)
@@ -560,7 +581,7 @@ class BiGmmGan(tdl.core.TdlModel):
             opt_step = optimizer.minimize(
                 loss, var_list=tdl.core.get_trainable(self.generator))
         return SimpleNamespace(
-            xsim=xsim,
+            xsim=xsim[-1],
             loss=loss,
             train_step=train_step,
             optimizer=optimizer,
@@ -572,20 +593,22 @@ class BiGmmGan(tdl.core.TdlModel):
     def discriminator_trainer(self, xreal, batch_size, learning_rate, beta1=0.0):
         tdl.core.assert_initialized(
             self, 'discriminator_trainer',
-            ['embedding', 'generator', 'discriminator', 'discriminator_loss'])
+            ['embedding', 'generator', 'discriminator', 'discriminator_loss',
+             'pyramid'])
         train_step = tf.Variable(0, dtype=tf.int32, name='train_step')
         optimizer = tf.compat.v1.train.AdamOptimizer(
             learning_rate, beta1=beta1)
 
-        xsim = self.generator(self.embedding(batch_size))
-        loss = self.discriminator_loss(x_real=xreal, x_sim=xsim)
+        xreal = [tf.stop_gradient(xi) for xi in self.pyramid(xreal)]
+        xsim = self.generator(self.embedding(batch_size), output="pyramid")
+        loss = self.discriminator_loss(xreal, xsim)
 
         with tf.control_dependencies([train_step.assign_add(1)]):
             opt_step = optimizer.minimize(
                 loss, var_list=tdl.core.get_trainable(self.discriminator))
         return SimpleNamespace(
-            xreal=xreal,
-            xsim=xsim,
+            xreal=xreal[-1],
+            xsim=xsim[-1],
             loss=loss,
             train_step=train_step,
             optimizer=optimizer,
@@ -603,7 +626,7 @@ class BiGmmGan(tdl.core.TdlModel):
 
         estimator = Estimator(loss=NegLogProb(), model=self.encoder)
         z_samp = self.embedding(batch_size)
-        sim_pyramid = self.generator.pyramid(z_samp)
+        sim_pyramid = self.generator(z_samp, output="pyramid")
         x_sim = sim_pyramid[-1]
 
         optim = estimator.get_optimizer(x_sim, z_samp, **optimizer)
@@ -612,17 +635,17 @@ class BiGmmGan(tdl.core.TdlModel):
             variables=tdl.core.get_variables(self.encoder) +
             optim.optimizer.variables())
 
-    def embedding_trainer(self, batch_size, xreal, optimizer=None, **kwargs):
+    def embedding_trainer(self, batch_size, xreal, optimizer=None,
+                          embedding_kl=0.005):
         tdl.core.assert_initialized(
             self, 'embedding_trainer',
-            ['generator', 'discriminator', 'noise_rate', 'pyramid',
-             'embedding', 'encoder', 'linear_disc'])
+            ['generator', 'discriminator', 'pyramid', 'embedding', 'encoder'])
 
         if optimizer is None:
             optimizer = dict()
 
         z_sim = self.embedding(batch_size)
-        pyramid_sim = self.generator.pyramid(z_sim)
+        pyramid_sim = self.generator(z_sim, output="pyramid")
         xsim = pyramid_sim[-1]
 
         zp_sim = self.encoder(xsim)
@@ -632,8 +655,7 @@ class BiGmmGan(tdl.core.TdlModel):
             loss=CallWrapper(
                 model=EmbeddingLoss(
                     model=self.embedding,
-                    reg_scale=kwargs['loss']['embedding_kl'],
-                    linear_disc=self.linear_disc
+                    reg_scale=embedding_kl,
                 ),
                 call_fn=lambda model, _, x: model(x[0], x[1])),
             model=CallWrapper(

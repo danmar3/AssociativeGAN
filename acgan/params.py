@@ -555,8 +555,61 @@ PARAMS['cifar10']['wacganDev']['encoder_trainer']: {
 
 PARAMS['cifar10']['wacganDev']['run'] = {
     'gan_steps': 200,
-    'encoder_steps': 1500,
+    'encoder_steps': 2000,
     'embedding_steps': 500,
     'homogenize': False,
     'reset_embedding': 5
     }
+
+
+PARAMS['cifar10']['bigmmgan'] = {
+    'data': {},
+    'model': {
+        'embedding_size': 64,
+        'batchnorm': 'pixelwise',
+        'equalized': True,
+        'embedding': {'n_components': 100, 'min_scale_p': 0.1,
+                      'constrained_loc': True
+                      },
+        'encoder': {
+            'units': [32, 64, 64, 64],
+            'strides': None,
+            'pooling': 2},
+        'generator': {
+            'init_shape': [4, 4, 512],
+            'units': [256, 128, 64],
+            'add_noise': [False, True, True],
+            'output_channels': 3,
+            'output_activation': None,
+            },
+        'discriminator': {
+            'units': [64, 128, 256],
+            }
+        },
+    'generator_trainer': {
+        'batch_size': 16,
+        'learning_rate': 0.0005,
+        'beta1': 0.0,
+        },
+    'discriminator_trainer': {
+        'batch_size': 16,
+        'learning_rate': 0.0005,
+        'beta1': 0.0,
+        },
+    'encoder_trainer': {
+        'batch_size': 16,
+        'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+        },
+    'embedding_trainer': {
+        'batch_size': 16,
+        'optimizer': {'learning_rate': 0.0005, 'beta1': 0.0},
+        'embedding_kl': 0.005,
+        },
+    'run': {
+        'gan_steps': 200,
+        'encoder_steps': 200,
+        'embedding_steps': 50,
+        'homogenize': False,
+        'reset_embedding': 5,
+        }
+}
