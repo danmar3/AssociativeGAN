@@ -560,6 +560,7 @@ class ResNet(tdl.core.Layer):
     def hidden(self, units, pooling=None, kernels=3,
                dropout=None, batchnorm=None, stages=3, strides=None,
                layer_type="bottleneck", pre_activation=True,
+               upsample=None,
                **kargs):
         """hidden layers
         Args:
@@ -595,6 +596,13 @@ class ResNet(tdl.core.Layer):
         assert (isinstance(strides, (int, list, tuple)) or (strides is None))
         if isinstance(strides, (int, dict)) or strides is None:
             strides = [strides for _ in range(n_layers)]
+        # upsample arg
+        assert (isinstance(upsample, (int, dict, list, tuple))
+                or upsample is None)
+        if isinstance(upsample, (int, dict)) or upsample is None:
+            upsample = [upsample for _ in range(n_layers)]
+        if all(isinstance(ui, int) or (ui is None) for ui in upsample):
+            upsample = [{'size': ui} for ui in upsample]
         # batchnorm
         if (self.batchnorm is not None) and (batchnorm is None):
             batchnorm = self.batchnorm
@@ -609,6 +617,7 @@ class ResNet(tdl.core.Layer):
                 leaky_rate=self.leaky_rate,
                 strides=strides[i],
                 pooling=pooling[i],
+                upsample=upsample[i],
                 dropout=dropout,
                 use_bias=self.use_bias,
                 equalized=self.equalized,
