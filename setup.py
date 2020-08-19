@@ -3,6 +3,7 @@ try:
 except ImportError:  # pip < 10.0
     from pip.operations import freeze
 from setuptools import setup, find_packages
+import importlib.util
 # for development installation: pip install -e .
 # for distribution: python setup.py sdist #bdist_wheel
 #                   pip install dist/project_name.tar.gz
@@ -18,13 +19,16 @@ def get_dependencies():
 
     def is_tensorflow(pkg_name):
         tf_names = ['tensorflow-gpu', 'tensorflow', 'tf-nightly']
-        return any(tfname == pkg_name.split('==')[0] for tfname in tf_names)
+        test1 = any(tfname == pkg_name.split('==')[0]
+                    for tfname in tf_names)
+        test2 = importlib.util.find_spec('tensorflow')
+        return test1 or test2
 
     tf_installed = any([is_tensorflow(installed)
                         for installed in freeze.freeze()])
     if tf_installed:
-        name_version = list(filter(is_tensorflow, freeze.freeze()))[0]
-        version = name_version.split('==')[1]
+        import tensorflow as tf
+        version = tf.__version__
         if version not in ('1.13.1', '1.15.2', '1.15.3'):
             print('\n[twodlearn]: '
                   'ONLY 1.13.1 VERSION OF TENSORFLOW SUPPORTED!!!\n'
