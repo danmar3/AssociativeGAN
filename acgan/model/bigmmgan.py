@@ -549,7 +549,7 @@ class BiGmmGan(tdl.core.TdlModel):
                'pooling': pooling,
                'stages': stages,
                'layer_type': layer_type,
-               'pre_activation': False},
+               'pre_activation': True},
            flatten={'method': 'global_avgpool',
                     'batchnorm': 'batchnorm'},
            dense={'units': self.embedding_size},
