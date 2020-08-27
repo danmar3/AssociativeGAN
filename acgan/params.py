@@ -606,11 +606,21 @@ PARAMS['cifar10']['bigmmgan'] = {
         },
     'encoder_trainer': {
         'batch_size': 16,
-        'optimizer': {'learning_rate': 0.0005, 'beta1': 0.9},
+        'optimizer': {
+            # 'learning_rate': 0.0005,
+            # 'optimizer': {'method': 'adam', 'beta1': 0.9}
+            'learning_rate': 0.01,
+            'optimizer': {'method': 'sgd', 'momentum': 0.9}
+            },
         },
     'embedding_trainer': {
         'batch_size': 16,
-        'optimizer': {'learning_rate': 0.0005, 'beta1': 0.9},
+        'optimizer': {
+            # 'learning_rate': 0.0005,
+            # 'optimizer': {'method': 'adam', 'beta1': 0.9},
+            'learning_rate': 0.01,
+            'optimizer': {'method': 'sgd', 'momentum': 0.9}
+            },
         'embedding_kl': 0.005,
         },
     'run': {

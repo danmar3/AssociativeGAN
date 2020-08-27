@@ -511,6 +511,8 @@ class ExperimentBiGmmGan(ExperimentWACGAN_Dev):
 
         if reset:
             self.session.run(self.model.embedding.init_op)
+            self.trainer.encoder.optim.progress.reset()
+            self.trainer.embedding.optim.progress.reset()
         self.trainer.embedding.optim.run(n_steps=_n_steps)
 
     @eager_function

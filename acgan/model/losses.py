@@ -78,9 +78,7 @@ class DLogistic():
 
 class NegLogProb(tdl.core.Layer):
     def call(self, labels, predicted):
-        return tf.reduce_mean(
-            tdl.core.array.reduce_sum_rightmost(
-                -predicted.log_prob(labels)))
+        return tf.reduce_mean(-predicted.log_prob(labels))
 
 
 def scale_loss(comp, ref):
