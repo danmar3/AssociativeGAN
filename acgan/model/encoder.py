@@ -240,12 +240,14 @@ class Estimator(tdl.core.TdlModel):
     def _get_optimizer(self, ops, learning_rate, **kargs):
         tdl.core.assert_initialized(
             self, '_get_optimizer', ['trainable_variables'])
-        return tdl.optimv2.SimpleOptimizer(
+        optim = tdl.optimv2.SimpleOptimizer(
             loss=ops.train['loss'],
             var_list=self.trainable_variables,
             metrics={'ops': ops.train['metrics'], 'buffer_size': 100},
             learning_rate=learning_rate,
             **kargs)
+        tdl.core.build(optim)
+        return optim
 
     def get_optimizer(self, train_x, train_y, valid_x=None, valid_y=None,
                       learning_rate=None, **kargs):
