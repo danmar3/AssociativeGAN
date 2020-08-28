@@ -1,5 +1,9 @@
 # exit when any command fails
 set -e
+
+# prereqs
+# sudo apt install build-essential python3-dev python3-venv
+
 # cleanup env and external from previous install
 rm -rf env || true
 rm -rf external || true
@@ -9,6 +13,7 @@ python3 -m venv env
 
 # 2. install tensorflow
 source env/bin/activate
+pip install --upgrade pip setuptools
 mkdir external
 
 OS_DISTRO=$(lsb_release -si)
