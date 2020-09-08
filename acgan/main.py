@@ -14,6 +14,7 @@ from .model import msg_gan
 from .model.gmm_gan import GmmGan
 from .model.wacgan import WacGan, WacGanV2, WacGanDev
 from .model.bigmmgan import BiGmmGan
+from .model.exgan import ExGan
 import functools
 from sklearn.manifold import TSNE
 
@@ -519,4 +520,48 @@ class ExperimentBiGmmGan(ExperimentWACGAN_Dev):
     def reconstruct(self, x_seed):
         encoded = self.model.encoder(x_seed)
         xrecon = self.model.generator(encoded.sample())
+        return xrecon[-1]
+
+
+class ExperimentExGan(ExperimentWACGAN_Dev):
+    name = 'exgan'
+    Model = ExGan
+
+    def restore(self, pathname=None):
+        super(ExperimentExGan, self).restore(pathname=pathname)
+        self.trainer.classifier_trained = True
+
+    def _init_trainer(self, data_real):
+        trainer = tdl.core.SimpleNamespace(
+            gen=self.model.generator_trainer(
+                xreal=data_real['image'],
+                **self.params['generator_trainer']),
+            dis=self.model.discriminator_trainer(
+                xreal=data_real['image'], yreal=data_real['label'],
+                **self.params['discriminator_trainer']),
+            classifier=self.model.classifier_trainer(
+                xreal=data_real['image'],
+                **self.params['classifier_trainer']),
+            classifier_trained=False
+            )
+        tdl.core.variables_initializer(trainer.gen.variables).run()
+        tdl.core.variables_initializer(trainer.dis.variables).run()
+        tdl.core.variables_initializer(trainer.classifier.variables).run()
+        return trainer
+
+    def _train_encoder(self, encoder_steps):
+        if not self.trainer.classifier_trained:
+            self.trainer.classifier.optim.run(
+                n_steps=encoder_steps, learning_rate=0.01)
+            self.trainer.classifier.optim.run(
+                n_steps=encoder_steps, learning_rate=0.001)
+            self.trainer.classifier_trained = True
+
+    def _train_embedding(self, embedding_steps, reset_embedding):
+        return
+
+    @eager_function
+    def reconstruct(self, x_seed):
+        encoded = self.model.encoder(x_seed)
+        xrecon = self.model.generator(encoded)
         return xrecon[-1]

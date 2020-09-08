@@ -607,19 +607,19 @@ PARAMS['cifar10']['bigmmgan'] = {
     'encoder_trainer': {
         'batch_size': 16,
         'optimizer': {
-            # 'learning_rate': 0.0005,
-            # 'optimizer': {'method': 'adam', 'beta1': 0.9}
-            'learning_rate': 0.01,
-            'optimizer': {'method': 'sgd', 'momentum': 0.9}
+            'learning_rate': 0.0005,
+            'optimizer': {'method': 'adam', 'beta1': 0.9},
+            # 'learning_rate': 0.1,
+            # 'optimizer': {'method': 'momentum', 'momentum': 0.9}
             },
         },
     'embedding_trainer': {
         'batch_size': 16,
         'optimizer': {
-            # 'learning_rate': 0.0005,
-            # 'optimizer': {'method': 'adam', 'beta1': 0.9},
-            'learning_rate': 0.01,
-            'optimizer': {'method': 'sgd', 'momentum': 0.9}
+            'learning_rate': 0.0005,
+            'optimizer': {'method': 'adam', 'beta1': 0.9},
+            # 'learning_rate': 0.01,
+            # 'optimizer': {'method': 'momentum', 'momentum': 0.9}
             },
         'embedding_kl': 0.005,
         },
@@ -628,6 +628,62 @@ PARAMS['cifar10']['bigmmgan'] = {
         'encoder_steps': 2000,
         'embedding_steps': 500,
         'homogenize': False,
+        'reset_embedding': 5,
+        }
+}
+
+
+PARAMS['cifar10']['exgan'] = {
+    'data': {'with_label': True},
+    'model': {
+        'embedding_size': 256,
+        'batchnorm': 'pixelwise',
+        'equalized': True,
+        'embedding': {'n_components': 100, 'min_scale_p': 0.1,
+                      'constrained_loc': True
+                      },
+        'encoder': {
+            'units': [64, 128, 256],
+            'strides': [None, 2, 2],
+            'pooling': None,
+            'stages': [5, 5, 5],
+            'layer_type': 'plain'},
+        'generator': {
+            'init_shape': [4, 4, 256],
+            'units': [256, 128, 64],
+            'add_noise': [False, True, True],
+            'output_channels': 3,
+            'output_activation': None,
+            'hidden': {
+                'stages': 5,
+                'layer_type': 'plain'
+                }
+            },
+        'discriminator': {
+            'units': [64, 128, 256],
+            'hidden': {
+                'stages': 5,
+                'layer_type': 'plain'
+                }
+            }
+        },
+    'generator_trainer': {
+        'batch_size': 64,
+        'sim_alpha': 0.01,
+        'learning_rate': 0.0005,
+        'beta1': 0.0,
+        },
+    'discriminator_trainer': {
+        'learning_rate': 0.0005,
+        'beta1': 0.0,
+        },
+    'classifier_trainer': {
+        'learning_rate': 0.0005,
+        'beta1': 0.0,
+        },
+    'run': {
+        'gan_steps': 200,
+        'encoder_steps': 10000,
         'reset_embedding': 5,
         }
 }
