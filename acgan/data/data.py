@@ -278,7 +278,8 @@ def load_cifar10(
         batch_img = tf.cast(batch['image'], tf.float32)
         batch_img = (batch_img-127.5)/127.5
         if with_label:
-            batch = {'label': batch['label'], 'image': batch_img}
+            batch = {'label': tf.one_hot(batch['label'], depth=10),
+                     'image': batch_img}
         else:
             batch = batch_img
         return batch

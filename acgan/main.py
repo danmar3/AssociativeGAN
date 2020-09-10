@@ -315,6 +315,12 @@ class ExperimentGMM(object):
         Z_embedded = TSNE(n_components=2).fit_transform(Z)
         ax.scatter(Z_embedded[:, 0], Z_embedded[:, 1])
 
+    def visualize_embedding(self, ax1, ax2, visualize_manifold):
+        probs = self.model.embedding.dist.cat.probs.eval()
+        ax1.bar(x=range(probs.shape[0]), height=probs)
+        if visualize_manifold:
+            self.visualize_manifold(ax=ax2)
+
     def visualize(self, save=False, filename=None, visualize_manifold=False):
         if filename is None:
             folder = os.path.join(self.output_dir, 'images')
@@ -346,10 +352,8 @@ class ExperimentGMM(object):
         ax = reserve_ax(start=20, scale=(2, 10), shape=(1, 1))
         ax1 = fig.add_subplot(gs[20:22, 0:8])
         ax2 = fig.add_subplot(gs[20:22, 8:10])
-        probs = self.model.embedding.dist.cat.probs.eval()
-        ax1.bar(x=range(probs.shape[0]), height=probs)
-        if visualize_manifold:
-            self.visualize_manifold(ax=ax2)
+
+        self.visualize_embedding(ax1, ax2, visualize_manifold)
 
         ax = reserve_ax(start=22, scale=(1, 1), shape=(8, 10))
         self.visualize_reconstruction(ax=ax)
@@ -537,10 +541,10 @@ class ExperimentExGan(ExperimentWACGAN_Dev):
                 xreal=data_real['image'],
                 **self.params['generator_trainer']),
             dis=self.model.discriminator_trainer(
-                xreal=data_real['image'], yreal=data_real['label'],
+                xreal=data_real['image'],
                 **self.params['discriminator_trainer']),
             classifier=self.model.classifier_trainer(
-                xreal=data_real['image'],
+                xreal=data_real['image'], yreal=data_real['label'],
                 **self.params['classifier_trainer']),
             classifier_trained=False
             )
@@ -552,9 +556,9 @@ class ExperimentExGan(ExperimentWACGAN_Dev):
     def _train_encoder(self, encoder_steps):
         if not self.trainer.classifier_trained:
             self.trainer.classifier.optim.run(
-                n_steps=encoder_steps, learning_rate=0.01)
-            self.trainer.classifier.optim.run(
                 n_steps=encoder_steps, learning_rate=0.001)
+            self.trainer.classifier.optim.run(
+                n_steps=encoder_steps, learning_rate=0.0001)
             self.trainer.classifier_trained = True
 
     def _train_embedding(self, embedding_steps, reset_embedding):
@@ -565,3 +569,12 @@ class ExperimentExGan(ExperimentWACGAN_Dev):
         encoded = self.model.encoder(x_seed)
         xrecon = self.model.generator(encoded)
         return xrecon[-1]
+
+    def visualize_clusters(self, ax=None):
+        '''visualize samples from gmm clusters.'''
+        if ax is None:
+            _, ax = plt.subplots(10, 10, figsize=(15, 15))
+        return
+
+    def visualize_embedding(self, ax1, ax2, visualize_manifold):
+        return

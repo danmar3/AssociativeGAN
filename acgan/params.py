@@ -634,20 +634,21 @@ PARAMS['cifar10']['bigmmgan'] = {
 
 
 PARAMS['cifar10']['exgan'] = {
-    'data': {'with_label': True},
+    'data': {'with_label': True, 'augment_data': True, 'crop_method': 'pad'},
     'model': {
         'embedding_size': 256,
         'batchnorm': 'pixelwise',
         'equalized': True,
-        'embedding': {'n_components': 100, 'min_scale_p': 0.1,
-                      'constrained_loc': True
-                      },
+        # 'embedding': {'n_components': 100, 'min_scale_p': 0.1,
+        #               'constrained_loc': True
+        #               },
         'encoder': {
             'units': [64, 128, 256],
             'strides': [None, 2, 2],
             'pooling': None,
             'stages': [5, 5, 5],
             'layer_type': 'plain'},
+        'classifier': {'n_classes': 10},
         'generator': {
             'init_shape': [4, 4, 256],
             'units': [256, 128, 64],
@@ -678,12 +679,13 @@ PARAMS['cifar10']['exgan'] = {
         'beta1': 0.0,
         },
     'classifier_trainer': {
-        'learning_rate': 0.0005,
-        'beta1': 0.0,
+        'regularizer': {'scale': 0.0001},
+        # 'optimizer': {'optimizer': {'method': 'momentum', 'momentum': 0.9}}
         },
     'run': {
         'gan_steps': 200,
         'encoder_steps': 10000,
+        'embedding_steps': None,
         'reset_embedding': 5,
         }
 }

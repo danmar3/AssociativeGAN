@@ -578,6 +578,7 @@ class ExGan(tdl.core.TdlModel):
 
     def classifier_trainer(self, xreal, yreal, regularizer=None,
                            optimizer=None):
+        tdl.core.assert_initialized(self, 'classifier_trainer', ['classifier'])
         if regularizer is None:
             regularizer = {'scale': 0.0001}
         if optimizer is None:
@@ -605,7 +606,7 @@ class ExGan(tdl.core.TdlModel):
 
         zreal = tf.stop_gradient(self.encoder(xreal))
         xsim = self.generator(zreal, output="pyramid")
-        similarity = tf.reduce_mean((self.encoder(xsim) - zreal)**2.0)
+        similarity = tf.reduce_mean((self.encoder(xsim[-1]) - zreal)**2.0)
 
         logits = self.discriminator(xsim)
         loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)(
