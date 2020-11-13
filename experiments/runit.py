@@ -20,6 +20,8 @@ EXPERIMENTS = {
     'exgan': ExperimentExGan}
 
 # python3 gmmgan_test.py --n_steps=100 --n_steps_save=5 --gpu=6 --session="tmp/gmmgan/session_20190925:0443"
+# python runit.py --session="tmp/exgan/session_20200911_2357_cifar10_dev" --n_steps=10000 --n_steps_save=5 --dataset="cifar10" --indicator="cifar10_dev" --model="exgan"
+# python runit.py --gpu=5 --n_steps=10000 --n_steps_save=5 --dataset="cifar10" --indicator="cifar10_dev" --model="exgan"
 
 
 def main():
