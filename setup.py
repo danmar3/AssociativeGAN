@@ -38,7 +38,10 @@ def get_dependencies():
                 'tensorflow-probability==0.6.0', 'tensorflow-datasets==1.2.0']
         elif version in ('1.15.2', '1.15.3'):
             DEPS = DEPS + [
-                'tensorflow-probability==0.8.0', 'tensorflow-datasets==3.2.1']
+                'tensorflow-probability==0.8.0', 'tensorflow-datasets==3.2.1',
+                'tensorflow-hub==0.9.0',
+                'tensorflow-metadata==0.23.0'
+                'requests==2.24.0']
         else:
             DEPS = DEPS + ['tensorflow-probability', 'tensorflow-datasets']
         return DEPS

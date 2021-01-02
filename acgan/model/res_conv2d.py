@@ -8,6 +8,7 @@ import tensorflow.keras.layers as tf_layers
 
 from . import equalized
 from .base import VectorNormalizer
+from .non_local import NonLocalBlock
 from ..utils import replicate_to_list
 
 
@@ -561,6 +562,7 @@ class ResNet(tdl.core.Layer):
                dropout=None, batchnorm=None, stages=3, strides=None,
                layer_type="bottleneck", pre_activation=True,
                upsample=None,
+               non_local=None,
                **kargs):
         """hidden layers
         Args:
@@ -606,10 +608,13 @@ class ResNet(tdl.core.Layer):
         # batchnorm
         if (self.batchnorm is not None) and (batchnorm is None):
             batchnorm = self.batchnorm
+        # nonlocal
+        if non_local is None:
+            non_local = [False for _ in range(n_layers)]
         # build
         model = tdl.stacked.StackedLayers()
         for i in range(len(units)):
-            model.add(self.LAYER_TYPE[layer_type](
+            res_block = self.LAYER_TYPE[layer_type](
                 stages=stages[i],
                 units=units[i],
                 kernel_size=kernels[i],
@@ -623,7 +628,14 @@ class ResNet(tdl.core.Layer):
                 equalized=self.equalized,
                 pre_activation=pre_activation,
                 **kargs
-                ))
+                )
+            if non_local[i]:
+                model.add(tdl.stacked.StackedLayers(
+                    layers=[res_block, NonLocalBlock()]
+                    ))
+            else:
+                model.add(res_block)
+
         return model
 
     @tdl.core.SubmodelInit(lazzy=True)
