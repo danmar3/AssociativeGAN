@@ -276,7 +276,11 @@ def load_cifar10(
 
     def map_fn(batch):
         batch_img = tf.cast(batch['image'], tf.float32)
-        batch_img = (batch_img-127.5)/127.5
+        # batch_img = (batch_img-127.5)/127.5
+        import numpy as np
+        print("using color normalize")
+        batch_img = (batch_img - np.array([125.3, 123.0, 113.9]))/(
+            np.array([63.0,  62.1,  66.7]))
         if with_label:
             batch = {'label': tf.one_hot(batch['label'], depth=10),
                      'image': batch_img}
