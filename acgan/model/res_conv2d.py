@@ -465,7 +465,9 @@ class ResStages(tdl.stacked.StackedLayers):
         for idx in range(self.stages):
             layers.append(ResBlockPreAct(
                 pre_activation={
-                    'enable': self.pre_activation if idx == 0 else False},
+                    'enable': self.pre_activation if idx == 0 else False,
+                    'leaky_rate': self.leaky_rate,
+                    },
                 residual={
                     'conv': {
                         'filters': [self.units, self.units],
@@ -502,7 +504,9 @@ class ResBottleneck(ResStages):
         for idx in range(self.stages):
             layers.append(ResBlockPreAct(
                 pre_activation={
-                    'enable': self.pre_activation if idx == 0 else False},
+                    'enable': self.pre_activation if idx == 0 else False,
+                    'leaky_rate': self.leaky_rate,
+                    },
                 residual={
                     'conv': {
                         'filters': [self.units//4, self.units//4, self.units],
